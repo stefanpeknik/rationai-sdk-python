@@ -9,15 +9,24 @@ from httpx._types import TimeoutTypes
 
 
 if TYPE_CHECKING:
+    from rationai.resources.executions import AsyncExecutions, Executions
     from rationai.resources.models import AsyncModels, Models
     from rationai.resources.qc import AsyncQualityControl, QualityControl
     from rationai.resources.slide import AsyncSlide, Slide
+    from rationai.resources.workflows import AsyncWorkflows, Workflows
+
+
+DEFAULT_MODEL_SERVICE_URL = (
+    "http://rayservice-model-execution-scheduler."
+    "rationai-jobs-ns.svc.cluster.local:8080"
+)
 
 
 class Client(httpx.Client):
     def __init__(
         self,
         *,
+        base_url: URL | str = DEFAULT_MODEL_SERVICE_URL,
         models_base_url: URL
         | str = "http://rayservice-model-serve-svc.rationai-jobs-ns.svc.cluster.local:8000",
         qc_base_url: URL
@@ -25,7 +34,13 @@ class Client(httpx.Client):
         timeout: TimeoutTypes = 100,
         **kwargs: Any,
     ) -> None:
-        super().__init__(timeout=timeout, follow_redirects=True, **kwargs)
+        super().__init__(
+            base_url=base_url,
+            timeout=timeout,
+            follow_redirects=True,
+            **kwargs,
+        )
+        self.model_service_base_url = base_url
         self.models_base_url = models_base_url
         self.qc_base_url = qc_base_url
 
@@ -51,11 +66,24 @@ class Client(httpx.Client):
 
         return QualityControl(self, base_url=self.qc_base_url)
 
+    @cached_property
+    def workflows(self) -> Workflows:
+        from rationai.resources.workflows import Workflows
+
+        return Workflows(self, base_url=self.model_service_base_url)
+
+    @cached_property
+    def executions(self) -> Executions:
+        from rationai.resources.executions import Executions
+
+        return Executions(self, base_url=self.model_service_base_url)
+
 
 class AsyncClient(httpx.AsyncClient):
     def __init__(
         self,
         *,
+        base_url: URL | str = DEFAULT_MODEL_SERVICE_URL,
         models_base_url: URL
         | str = "http://rayservice-model-serve-svc.rationai-jobs-ns.svc.cluster.local:8000",
         qc_base_url: URL
@@ -63,7 +91,13 @@ class AsyncClient(httpx.AsyncClient):
         timeout: TimeoutTypes = 100,
         **kwargs: Any,
     ) -> None:
-        super().__init__(timeout=timeout, follow_redirects=True, **kwargs)
+        super().__init__(
+            base_url=base_url,
+            timeout=timeout,
+            follow_redirects=True,
+            **kwargs,
+        )
+        self.model_service_base_url = base_url
         self.models_base_url = models_base_url
         self.qc_base_url = qc_base_url
 
@@ -88,3 +122,15 @@ class AsyncClient(httpx.AsyncClient):
         from rationai.resources.qc import AsyncQualityControl
 
         return AsyncQualityControl(self, base_url=self.qc_base_url)
+
+    @cached_property
+    def workflows(self) -> AsyncWorkflows:
+        from rationai.resources.workflows import AsyncWorkflows
+
+        return AsyncWorkflows(self, base_url=self.model_service_base_url)
+
+    @cached_property
+    def executions(self) -> AsyncExecutions:
+        from rationai.resources.executions import AsyncExecutions
+
+        return AsyncExecutions(self, base_url=self.model_service_base_url)

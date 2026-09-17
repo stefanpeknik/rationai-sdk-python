@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen)](https://rationai.github.io/rationai-sdk-python/)
 
-Python SDK for interacting with RationAI pathology image analysis services. This library provides both synchronous and asynchronous clients for image classification, segmentation, and quality control operations.
+Python SDK for interacting with RationAI pathology image analysis services. This library provides synchronous and asynchronous clients for model inference, workflows, durable executions, and quality control operations.
 
 ## Documentation
 
@@ -14,6 +14,7 @@ Comprehensive documentation is available at **[rationai.github.io/rationai-sdk-p
 
 - **Image Analysis**: Classify and segment pathology images (WSI patches) using deployed models.
 - **Quality Control**: Automated QC workflows for Whole Slide Images (WSI).
+- **Workflow Execution**: Run workflows synchronously or schedule durable work and poll it later.
 - **Concurrency**: Built-in async support for high-throughput processing.
 - **Efficiency**: Optimized data transfer with LZ4 compression.
 
