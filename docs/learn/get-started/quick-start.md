@@ -117,7 +117,7 @@ You can override service URLs and timeouts:
 from rationai import Client
 
 client = Client(
-    models_base_url="http://localhost:8000",
+    base_url="http://localhost:8080",
     qc_base_url="http://localhost:8001",
     timeout=300,
 )

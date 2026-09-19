@@ -87,7 +87,7 @@ def api_error(code: str, status_code: int) -> httpx.Response:
 
 
 class WorkflowClientTests(unittest.TestCase):
-    def test_existing_model_inference_keeps_its_base_url_and_compressed_body(
+    def test_existing_model_inference_uses_public_origin_and_compressed_body(
         self,
     ) -> None:
         captured: list[httpx.Request] = []
@@ -99,13 +99,12 @@ class WorkflowClientTests(unittest.TestCase):
         image = np.arange(12, dtype=np.uint8).reshape(2, 2, 3)
         with rationai.Client(
             base_url="http://model-service",
-            models_base_url="http://models",
             transport=httpx.MockTransport(handler),
         ) as client:
             result = client.models.classify_image("classifier", image)
 
         self.assertEqual(result, 0.75)
-        self.assertEqual(captured[0].url, "http://models/classifier")
+        self.assertEqual(captured[0].url, "http://model-service/classifier")
         self.assertEqual(lz4.frame.decompress(captured[0].content), image.tobytes())
 
     def test_run_serializes_tagged_inputs_and_parses_tagged_outputs(self) -> None:

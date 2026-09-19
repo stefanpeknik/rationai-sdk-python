@@ -16,10 +16,13 @@ At a high level:
 
 Each client holds two service base URLs:
 
-- `models_base_url`: classification + segmentation endpoints
+- `base_url`: model inference and workflow execution through one model-service
+  origin
 - `qc_base_url`: quality-control endpoints
 
-The `client.models` and `client.qc` properties return small resource objects that build requests relative to those base URLs.
+The `client.models`, `client.workflows`, `client.executions`, and `client.qc`
+properties return resource objects that build requests relative to those base
+URLs.
 
 Internally, requests are constructed by joining relative paths onto the configured base URLs (using `httpx.URL(...).join(...)`).
 
@@ -33,7 +36,7 @@ For `client.models.classify_image(model, image)` and `client.models.segment_imag
 2. The raw bytes are compressed using **LZ4 frame** (`lz4.frame.compress`).
 3. The compressed bytes are sent as the raw HTTP request body (binary) using `POST`.
 
-The request path is literally the `model` string you pass in, joined to `models_base_url`.
+The request path is the `model` string you pass in, joined to `base_url`.
 
 Important: the SDK sends only the raw pixel bytes. It does **not** send image metadata such as width/height/shape, color space, file name, or format.
 
