@@ -10,6 +10,8 @@ from rationai.types.workflows import (
     ScheduledExecution,
     SharedArtifact,
     SharedPathInput,
+    WorkflowInputKind,
+    WorkflowOutputKind,
     WorkflowRequest,
     WorkflowResult,
 )
@@ -28,6 +30,8 @@ __all__ = [
     "SharedPathInput",
     "SlideCheckConfig",
     "SlideCheckResult",
+    "WorkflowInputKind",
+    "WorkflowOutputKind",
     "WorkflowRequest",
     "WorkflowResult",
 ]

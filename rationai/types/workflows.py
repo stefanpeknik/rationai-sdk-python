@@ -18,22 +18,33 @@ class ExecutionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class WorkflowInputKind(StrEnum):
+    INLINE = "inline"
+    SHARED_PATH = "shared_path"
+    PROVIDER = "provider"
+
+
+class WorkflowOutputKind(StrEnum):
+    INLINE = "inline"
+    SHARED_ARTIFACT = "shared_artifact"
+
+
 @dataclass(frozen=True, slots=True)
 class InlineInput:
     value: JsonValue
-    kind: Literal["inline"] = "inline"
+    kind: Literal[WorkflowInputKind.INLINE] = WorkflowInputKind.INLINE
 
 
 @dataclass(frozen=True, slots=True)
 class SharedPathInput:
     path: str
-    kind: Literal["shared_path"] = "shared_path"
+    kind: Literal[WorkflowInputKind.SHARED_PATH] = WorkflowInputKind.SHARED_PATH
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderInput:
     name: str
-    kind: Literal["provider"] = "provider"
+    kind: Literal[WorkflowInputKind.PROVIDER] = WorkflowInputKind.PROVIDER
 
 
 type WorkflowInput = InlineInput | SharedPathInput | ProviderInput
@@ -62,14 +73,16 @@ class WorkflowRequest:
 @dataclass(frozen=True, slots=True)
 class InlineOutput:
     value: JsonValue
-    kind: Literal["inline"] = "inline"
+    kind: Literal[WorkflowOutputKind.INLINE] = WorkflowOutputKind.INLINE
 
 
 @dataclass(frozen=True, slots=True)
 class SharedArtifact:
     path: str
     media_type: str | None = None
-    kind: Literal["shared_artifact"] = "shared_artifact"
+    kind: Literal[WorkflowOutputKind.SHARED_ARTIFACT] = (
+        WorkflowOutputKind.SHARED_ARTIFACT
+    )
 
 
 type WorkflowOutput = InlineOutput | SharedArtifact
@@ -136,7 +149,7 @@ class ScheduledExecution:
         mapping = _mapping(value, "schedule response")
         created = mapping.get("created")
         if not isinstance(created, bool):
-            raise ValueError("schedule response created must be a boolean")
+            raise TypeError("schedule response created must be a boolean")
         return cls(
             execution=Execution.from_dict(mapping.get("execution")),
             created=created,
@@ -147,11 +160,11 @@ class ScheduledExecution:
 def _output(value: object) -> WorkflowOutput:
     mapping = _mapping(value, "workflow output")
     kind = mapping.get("kind")
-    if kind == "inline":
+    if kind == WorkflowOutputKind.INLINE:
         inline_value = mapping.get("value")
         _ensure_json(inline_value, "inline output")
         return InlineOutput(inline_value)
-    if kind == "shared_artifact":
+    if kind == WorkflowOutputKind.SHARED_ARTIFACT:
         media_type = mapping.get("media_type")
         if media_type is not None and not isinstance(media_type, str):
             raise ValueError("shared artifact media_type must be a string or null")

@@ -22,18 +22,33 @@ DEFAULT_MODEL_SERVICE_URL = (
 )
 
 
+def _model_service_url(
+    base_url: URL | str | None, models_base_url: URL | str | None
+) -> URL | str:
+    if base_url is None:
+        return (
+            models_base_url
+            if models_base_url is not None
+            else DEFAULT_MODEL_SERVICE_URL
+        )
+    if models_base_url is not None and URL(base_url) != URL(models_base_url):
+        raise ValueError("base_url and models_base_url must refer to the same service")
+    return base_url
+
+
 class Client(httpx.Client):
     def __init__(
         self,
         *,
-        base_url: URL | str = DEFAULT_MODEL_SERVICE_URL,
+        base_url: URL | str | None = None,
+        models_base_url: URL | str | None = None,
         qc_base_url: URL
         | str = "http://rayservice-qc-serve-svc.rationai-jobs-ns.svc.cluster.local:8000",
         timeout: TimeoutTypes = 100,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            base_url=base_url,
+            base_url=_model_service_url(base_url, models_base_url),
             timeout=timeout,
             follow_redirects=True,
             **kwargs,
@@ -79,14 +94,15 @@ class AsyncClient(httpx.AsyncClient):
     def __init__(
         self,
         *,
-        base_url: URL | str = DEFAULT_MODEL_SERVICE_URL,
+        base_url: URL | str | None = None,
+        models_base_url: URL | str | None = None,
         qc_base_url: URL
         | str = "http://rayservice-qc-serve-svc.rationai-jobs-ns.svc.cluster.local:8000",
         timeout: TimeoutTypes = 100,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            base_url=base_url,
+            base_url=_model_service_url(base_url, models_base_url),
             timeout=timeout,
             follow_redirects=True,
             **kwargs,

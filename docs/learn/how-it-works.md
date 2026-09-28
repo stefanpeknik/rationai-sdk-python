@@ -20,6 +20,9 @@ Each client holds two service base URLs:
   origin
 - `qc_base_url`: quality-control endpoints
 
+`models_base_url` remains accepted as an alias for `base_url` for existing
+callers. If both are supplied, they must name the same URL.
+
 The `client.models`, `client.workflows`, `client.executions`, and `client.qc`
 properties return resource objects that build requests relative to those base
 URLs.
@@ -108,5 +111,13 @@ You can override:
 
 ## Errors and status codes
 
-- The SDK calls `response.raise_for_status()` for all endpoints, so non-2xx responses raise `httpx.HTTPStatusError`.
+- Model inference, QC, and slide endpoints raise `httpx.HTTPStatusError` for
+  non-2xx responses.
+- Workflow and execution endpoints raise a `RationAIAPIError` subclass for a
+  structured API error. An unrecognized error body falls back to
+  `httpx.HTTPStatusError`. Transport failures raise `httpx.TransportError`,
+  except that exhausted scheduling retries become
+  `SchedulingUnavailableError` with `status_code=None`.
+- A scheduled workflow failure appears in `Execution.error` when polling; it
+  does not make `client.executions.get(...)` raise.
 - QC `check_slide` / async `check_slide` are retried only for HTTP 500 (up to 3 attempts with exponential backoff).

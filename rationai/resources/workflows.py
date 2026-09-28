@@ -38,9 +38,20 @@ class Workflows(APIResource):
         workflow_timeout_seconds: float = 3600,
         timeout: TimeoutTypes | UseClientDefault = None,
     ) -> WorkflowResult:
+        """Run a workflow and wait for its result.
+
+        Args:
+            workflow_id: Registered workflow name.
+            request: Typed inputs, configuration, and input access.
+            workflow_timeout_seconds: Server-side deadline from the time of this call.
+            timeout: HTTP timeout; defaults to no timeout for this request.
+
+        Returns:
+            The workflow outputs.
+        """
         body = _run_body(request, workflow_timeout_seconds)
         response = self._post(
-            f"/v1/workflows/{quote(workflow_id, safe='')}/run",
+            f"v1/workflows/{quote(workflow_id, safe='')}/run",
             json=body,
             timeout=timeout,
         )
@@ -56,12 +67,25 @@ class Workflows(APIResource):
         idempotency_key: str | None = None,
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> ScheduledExecution:
+        """Submit durable work, reusing the same key during transient retries.
+
+        Args:
+            workflow_id: Registered workflow name.
+            request: Typed inputs, configuration, and input access.
+            requested_timeout_seconds: Optional server-side execution deadline.
+            idempotency_key: Recovery key; generated if omitted. Reuse the same
+                key after a client restart to recover an ambiguous submission.
+            timeout: HTTP timeout for each submission attempt.
+
+        Returns:
+            The admitted execution, replay flag, and idempotency key.
+        """
         key = idempotency_key or str(uuid4())
         body = _schedule_body(request, requested_timeout_seconds, key)
         for attempt in range(_SCHEDULE_ATTEMPTS):
             try:
                 response = self._post(
-                    f"/v1/workflows/{quote(workflow_id, safe='')}/schedule",
+                    f"v1/workflows/{quote(workflow_id, safe='')}/schedule",
                     json=body,
                     timeout=timeout,
                 )
@@ -90,9 +114,20 @@ class AsyncWorkflows(AsyncAPIResource):
         workflow_timeout_seconds: float = 3600,
         timeout: TimeoutTypes | UseClientDefault = None,
     ) -> WorkflowResult:
+        """Run a workflow and wait for its result.
+
+        Args:
+            workflow_id: Registered workflow name.
+            request: Typed inputs, configuration, and input access.
+            workflow_timeout_seconds: Server-side deadline from the time of this call.
+            timeout: HTTP timeout; defaults to no timeout for this request.
+
+        Returns:
+            The workflow outputs.
+        """
         body = _run_body(request, workflow_timeout_seconds)
         response = await self._post(
-            f"/v1/workflows/{quote(workflow_id, safe='')}/run",
+            f"v1/workflows/{quote(workflow_id, safe='')}/run",
             json=body,
             timeout=timeout,
         )
@@ -108,12 +143,25 @@ class AsyncWorkflows(AsyncAPIResource):
         idempotency_key: str | None = None,
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> ScheduledExecution:
+        """Submit durable work, reusing the same key during transient retries.
+
+        Args:
+            workflow_id: Registered workflow name.
+            request: Typed inputs, configuration, and input access.
+            requested_timeout_seconds: Optional server-side execution deadline.
+            idempotency_key: Recovery key; generated if omitted. Reuse the same
+                key after a client restart to recover an ambiguous submission.
+            timeout: HTTP timeout for each submission attempt.
+
+        Returns:
+            The admitted execution, replay flag, and idempotency key.
+        """
         key = idempotency_key or str(uuid4())
         body = _schedule_body(request, requested_timeout_seconds, key)
         for attempt in range(_SCHEDULE_ATTEMPTS):
             try:
                 response = await self._post(
-                    f"/v1/workflows/{quote(workflow_id, safe='')}/schedule",
+                    f"v1/workflows/{quote(workflow_id, safe='')}/schedule",
                     json=body,
                     timeout=timeout,
                 )

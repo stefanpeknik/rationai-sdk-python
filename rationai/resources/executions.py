@@ -19,7 +19,7 @@ class Executions(APIResource):
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> Execution:
         response = self._get(
-            f"/v1/executions/{quote(execution_id, safe='')}",
+            f"v1/executions/{quote(execution_id, safe='')}",
             timeout=timeout,
         )
         raise_for_api_error(response)
@@ -32,7 +32,7 @@ class Executions(APIResource):
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> Execution:
         response = self._post(
-            f"/v1/executions/{quote(execution_id, safe='')}/cancel",
+            f"v1/executions/{quote(execution_id, safe='')}/cancel",
             timeout=timeout,
         )
         raise_for_api_error(response)
@@ -47,7 +47,7 @@ class AsyncExecutions(AsyncAPIResource):
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> Execution:
         response = await self._get(
-            f"/v1/executions/{quote(execution_id, safe='')}",
+            f"v1/executions/{quote(execution_id, safe='')}",
             timeout=timeout,
         )
         raise_for_api_error(response)
@@ -60,7 +60,7 @@ class AsyncExecutions(AsyncAPIResource):
         timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
     ) -> Execution:
         response = await self._post(
-            f"/v1/executions/{quote(execution_id, safe='')}/cancel",
+            f"v1/executions/{quote(execution_id, safe='')}/cancel",
             timeout=timeout,
         )
         raise_for_api_error(response)

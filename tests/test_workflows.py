@@ -22,6 +22,8 @@ from rationai.types import (
     InputAccess,
     SharedArtifact,
     SharedPathInput,
+    WorkflowInputKind,
+    WorkflowOutputKind,
     WorkflowRequest,
 )
 
@@ -87,6 +89,84 @@ def api_error(code: str, status_code: int) -> httpx.Response:
 
 
 class WorkflowClientTests(unittest.TestCase):
+    def test_legacy_model_url_configures_the_shared_origin(self) -> None:
+        paths: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            paths.append(request.url.path)
+            if request.url.path.endswith("/run"):
+                return httpx.Response(200, json=RESULT)
+            return httpx.Response(200, json=0.75)
+
+        with rationai.Client(
+            models_base_url="https://example.invalid/model-service/",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            client.models.classify_image(
+                "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
+            )
+            client.workflows.run("prostate-heatmap", workflow_request())
+
+        self.assertEqual(
+            paths,
+            [
+                "/model-service/classifier",
+                "/model-service/v1/workflows/prostate-heatmap/run",
+            ],
+        )
+
+    def test_conflicting_model_service_urls_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            rationai.Client(
+                base_url="https://one.invalid/",
+                models_base_url="https://two.invalid/",
+            )
+        with self.assertRaises(ValueError):
+            rationai.AsyncClient(
+                base_url="https://one.invalid/",
+                models_base_url="https://two.invalid/",
+            )
+
+    def test_model_workflow_and_execution_calls_keep_url_prefix(self) -> None:
+        requests: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path))
+            if request.url.path.endswith("/run"):
+                return httpx.Response(200, json=RESULT)
+            if request.url.path.endswith("/schedule"):
+                return httpx.Response(
+                    202, json={"execution": execution_body(), "created": True}
+                )
+            if "/executions/" in request.url.path:
+                return httpx.Response(200, json=execution_body())
+            return httpx.Response(200, json=0.75)
+
+        with rationai.Client(
+            base_url="https://example.invalid/model-service/",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            client.models.classify_image(
+                "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
+            )
+            client.workflows.run("prostate-heatmap", workflow_request())
+            scheduled = client.workflows.schedule(
+                "prostate-heatmap", workflow_request()
+            )
+            client.executions.get(scheduled.execution.id)
+            client.executions.cancel(scheduled.execution.id)
+
+        self.assertEqual(
+            requests,
+            [
+                ("POST", "/model-service/classifier"),
+                ("POST", "/model-service/v1/workflows/prostate-heatmap/run"),
+                ("POST", "/model-service/v1/workflows/prostate-heatmap/schedule"),
+                ("GET", "/model-service/v1/executions/execution-1"),
+                ("POST", "/model-service/v1/executions/execution-1/cancel"),
+            ],
+        )
+
     def test_existing_model_inference_uses_public_origin_and_compressed_body(
         self,
     ) -> None:
@@ -127,6 +207,9 @@ class WorkflowClientTests(unittest.TestCase):
         self.assertEqual(captured[0].url.path, "/v1/workflows/prostate-heatmap/run")
         body = json.loads(captured[0].content)
         self.assertEqual(body["inputs"]["slide"]["kind"], "shared_path")
+        self.assertEqual(
+            workflow_request().inputs["slide"].kind, WorkflowInputKind.SHARED_PATH
+        )
         self.assertEqual(body["input_access"]["kind"], "shared_storage")
         self.assertIsNotNone(datetime.fromisoformat(body["deadline_at"]).tzinfo)
         self.assertEqual(
@@ -137,6 +220,7 @@ class WorkflowClientTests(unittest.TestCase):
             ),
         )
         self.assertEqual(result.outputs["summary"], InlineOutput({"tiles": 42}))
+        self.assertEqual(result.outputs["summary"].kind, WorkflowOutputKind.INLINE)
 
     def test_generated_idempotency_key_is_reused_for_schedule_retry(self) -> None:
         payloads: list[dict[str, object]] = []
@@ -292,6 +376,46 @@ class WorkflowClientTests(unittest.TestCase):
 
 
 class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_model_url_keeps_prefix_across_async_resources(self) -> None:
+        requests: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path))
+            if request.url.path.endswith("/run"):
+                return httpx.Response(200, json=RESULT)
+            if request.url.path.endswith("/schedule"):
+                return httpx.Response(
+                    202, json={"execution": execution_body(), "created": True}
+                )
+            if "/executions/" in request.url.path:
+                return httpx.Response(200, json=execution_body())
+            return httpx.Response(200, json=0.75)
+
+        async with rationai.AsyncClient(
+            models_base_url="https://example.invalid/model-service",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await client.models.classify_image(
+                "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
+            )
+            await client.workflows.run("prostate-heatmap", workflow_request())
+            scheduled = await client.workflows.schedule(
+                "prostate-heatmap", workflow_request()
+            )
+            await client.executions.get(scheduled.execution.id)
+            await client.executions.cancel(scheduled.execution.id)
+
+        self.assertEqual(
+            requests,
+            [
+                ("POST", "/model-service/classifier"),
+                ("POST", "/model-service/v1/workflows/prostate-heatmap/run"),
+                ("POST", "/model-service/v1/workflows/prostate-heatmap/schedule"),
+                ("GET", "/model-service/v1/executions/execution-1"),
+                ("POST", "/model-service/v1/executions/execution-1/cancel"),
+            ],
+        )
+
     async def test_async_resources_use_the_same_typed_contract(self) -> None:
         requests: list[tuple[str, str]] = []
 
