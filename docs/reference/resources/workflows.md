@@ -26,12 +26,7 @@ request = WorkflowRequest(
         "slide": SharedPathInput("slides/input.svs"),
         "region_of_interest": SharedPathInput("masks/roi.tiff"),
     },
-    resolved_configuration={
-        "output_path": "outputs/heatmap.tiff",
-        "stride_fraction": 0.5,
-        "output_tile_height": 256,
-        "output_tile_width": 256,
-    },
+    output_path="outputs/heatmap.tiff",
     input_access=InputAccess(kind="shared_storage", state={"root": "/shared"}),
 )
 

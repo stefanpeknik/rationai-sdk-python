@@ -58,16 +58,23 @@ class InputAccess:
 
 @dataclass(frozen=True, slots=True)
 class WorkflowRequest:
+    """Supply workflow inputs and access, optionally choosing an output destination.
+
+    Processing settings are owned by model-service and selected at execution time.
+    """
+
     inputs: dict[str, WorkflowInput]
-    resolved_configuration: dict[str, JsonValue]
     input_access: InputAccess
+    output_path: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        body: dict[str, object] = {
             "inputs": {name: asdict(value) for name, value in self.inputs.items()},
-            "resolved_configuration": self.resolved_configuration,
             "input_access": asdict(self.input_access),
         }
+        if self.output_path is not None:
+            body["output_path"] = self.output_path
+        return body
 
 
 @dataclass(frozen=True, slots=True)

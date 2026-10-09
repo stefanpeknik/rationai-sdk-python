@@ -44,12 +44,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
                 "slide": SharedPathInput(slide_path),
                 "region_of_interest": SharedPathInput(roi_path),
             },
-            resolved_configuration={
-                "output_path": f"outputs/sdk-integration-{uuid4()}.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            output_path=f"outputs/sdk-integration-{uuid4()}.tiff",
             input_access=InputAccess(
                 kind="shared_storage",
                 state={"root": shared_root},

@@ -46,12 +46,7 @@ def workflow_request() -> WorkflowRequest:
             "slide": SharedPathInput("slides/input.svs"),
             "region_of_interest": SharedPathInput("masks/roi.tiff"),
         },
-        resolved_configuration={
-            "output_path": "outputs/heatmap.tiff",
-            "stride_fraction": 0.5,
-            "output_tile_height": 256,
-            "output_tile_width": 256,
-        },
+        output_path="outputs/heatmap.tiff",
         input_access=InputAccess(
             kind="shared_storage",
             state={"root": "/shared"},
@@ -89,6 +84,36 @@ def api_error(code: str, status_code: int) -> httpx.Response:
 
 
 class WorkflowClientTests(unittest.TestCase):
+    def test_run_and_schedule_accept_inputs_without_configuration(self) -> None:
+        bodies: list[dict[str, object]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            bodies.append(json.loads(request.content))
+            if request.url.path.endswith("/schedule"):
+                return httpx.Response(
+                    202, json={"execution": execution_body(), "created": True}
+                )
+            return httpx.Response(200, json=RESULT)
+
+        request = WorkflowRequest(
+            inputs={
+                "slide": SharedPathInput("slide.svs"),
+                "region_of_interest": SharedPathInput("roi.tiff"),
+            },
+            input_access=InputAccess("shared_storage", {"root": "/shared"}),
+        )
+        with rationai.Client(
+            base_url="http://model-service", transport=httpx.MockTransport(handler)
+        ) as client:
+            client.workflows.run("prostate-heatmap", request)
+            client.workflows.schedule(
+                "prostate-heatmap", request, idempotency_key="defaults-1"
+            )
+        self.assertNotIn("resolved_configuration", bodies[0])
+        self.assertNotIn("output_path", bodies[0])
+        self.assertNotIn("resolved_configuration", bodies[1]["body"])
+        self.assertNotIn("output_path", bodies[1]["body"])
+
     def test_legacy_model_url_configures_the_shared_origin(self) -> None:
         paths: list[str] = []
 
@@ -211,6 +236,8 @@ class WorkflowClientTests(unittest.TestCase):
             workflow_request().inputs["slide"].kind, WorkflowInputKind.SHARED_PATH
         )
         self.assertEqual(body["input_access"]["kind"], "shared_storage")
+        self.assertEqual(body["output_path"], "outputs/heatmap.tiff")
+        self.assertNotIn("resolved_configuration", body)
         self.assertIsNotNone(datetime.fromisoformat(body["deadline_at"]).tzinfo)
         self.assertEqual(
             result.outputs["heatmap"],
