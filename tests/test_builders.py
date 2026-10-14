@@ -153,7 +153,7 @@ class BuilderClientTests(unittest.TestCase):
                 models_base_url="https://two.invalid/",
             )
 
-    def test_model_workflow_and_execution_calls_keep_url_prefix(self) -> None:
+    def test_model_builder_and_execution_calls_keep_url_prefix(self) -> None:
         requests: list[tuple[str, str]] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -399,7 +399,7 @@ class BuilderClientTests(unittest.TestCase):
         self.assertEqual(completed.result, synchronous)
 
 
-class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
+class AsyncBuilderClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_legacy_model_url_keeps_prefix_across_async_resources(self) -> None:
         requests: list[tuple[str, str]] = []
 
