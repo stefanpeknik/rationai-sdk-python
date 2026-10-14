@@ -1,37 +1,39 @@
-from rationai.types.qc import SlideCheckConfig, SlideCheckResult
-from rationai.types.workflows import (
+from rationai.types.builders import (
+    BuilderInfo,
+    BuilderRequest,
+    BuilderResult,
     Execution,
     ExecutionError,
     ExecutionStatus,
-    InlineInput,
     InlineOutput,
     InputAccess,
+    InputKind,
+    ModelInfo,
+    OutputKind,
     ProviderInput,
     ScheduledExecution,
     SharedArtifact,
     SharedPathInput,
-    WorkflowInputKind,
-    WorkflowOutputKind,
-    WorkflowRequest,
-    WorkflowResult,
 )
+from rationai.types.qc import SlideCheckConfig, SlideCheckResult
 
 
 __all__ = [
+    "BuilderInfo",
+    "BuilderRequest",
+    "BuilderResult",
     "Execution",
     "ExecutionError",
     "ExecutionStatus",
-    "InlineInput",
     "InlineOutput",
     "InputAccess",
+    "InputKind",
+    "ModelInfo",
+    "OutputKind",
     "ProviderInput",
     "ScheduledExecution",
     "SharedArtifact",
     "SharedPathInput",
     "SlideCheckConfig",
     "SlideCheckResult",
-    "WorkflowInputKind",
-    "WorkflowOutputKind",
-    "WorkflowRequest",
-    "WorkflowResult",
 ]

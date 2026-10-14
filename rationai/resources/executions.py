@@ -8,7 +8,7 @@ from httpx._types import TimeoutTypes
 
 from rationai._resource import APIResource, AsyncAPIResource
 from rationai.errors import raise_for_api_error
-from rationai.types.workflows import Execution
+from rationai.types.builders import Execution
 
 
 class Executions(APIResource):

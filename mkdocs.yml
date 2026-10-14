@@ -14,11 +14,11 @@ nav:
           - Models: reference/resources/models.md
           - Quality control: reference/resources/qc.md
           - Slide: reference/resources/slide.md
-          - Workflows: reference/resources/workflows.md
+          - Builders: reference/resources/builders.md
           - Executions: reference/resources/executions.md
       - Types:
           - QC types: reference/types/qc.md
-          - Workflow types: reference/types/workflows.md
+          - Builder types: reference/types/builders.md
 
 theme:
   name: material

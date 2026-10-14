@@ -10,21 +10,21 @@ import numpy as np
 
 import rationai
 from rationai.errors import (
-    InvalidWorkflowRequestError,
+    InvalidRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
+    UnknownBuilderError,
     UnknownExecutionError,
-    UnknownWorkflowError,
 )
 from rationai.types import (
+    BuilderRequest,
     ExecutionStatus,
     InlineOutput,
     InputAccess,
+    InputKind,
+    OutputKind,
     SharedArtifact,
     SharedPathInput,
-    WorkflowInputKind,
-    WorkflowOutputKind,
-    WorkflowRequest,
 )
 
 
@@ -40,8 +40,9 @@ RESULT = {
 }
 
 
-def workflow_request() -> WorkflowRequest:
-    return WorkflowRequest(
+def builder_request() -> BuilderRequest:
+    return BuilderRequest(
+        model_id="prostate-classifier-1",
         inputs={
             "slide": SharedPathInput("slides/input.svs"),
             "region_of_interest": SharedPathInput("masks/roi.tiff"),
@@ -62,7 +63,8 @@ def execution_body(
 ) -> dict[str, object]:
     return {
         "id": "execution-1",
-        "workflow_id": "prostate-heatmap",
+        "builder_id": "heatmap",
+        "model_id": "prostate-classifier-1",
         "status": status,
         "result": result,
         "error": error,
@@ -83,7 +85,7 @@ def api_error(code: str, status_code: int) -> httpx.Response:
     )
 
 
-class WorkflowClientTests(unittest.TestCase):
+class BuilderClientTests(unittest.TestCase):
     def test_run_and_schedule_accept_inputs_without_configuration(self) -> None:
         bodies: list[dict[str, object]] = []
 
@@ -95,7 +97,8 @@ class WorkflowClientTests(unittest.TestCase):
                 )
             return httpx.Response(200, json=RESULT)
 
-        request = WorkflowRequest(
+        request = BuilderRequest(
+            model_id="prostate-classifier-1",
             inputs={
                 "slide": SharedPathInput("slide.svs"),
                 "region_of_interest": SharedPathInput("roi.tiff"),
@@ -105,10 +108,8 @@ class WorkflowClientTests(unittest.TestCase):
         with rationai.Client(
             base_url="http://model-service", transport=httpx.MockTransport(handler)
         ) as client:
-            client.workflows.run("prostate-heatmap", request)
-            client.workflows.schedule(
-                "prostate-heatmap", request, idempotency_key="defaults-1"
-            )
+            client.builders.run("heatmap", request)
+            client.builders.schedule("heatmap", request, idempotency_key="defaults-1")
         self.assertNotIn("resolved_configuration", bodies[0])
         self.assertNotIn("output_path", bodies[0])
         self.assertNotIn("resolved_configuration", bodies[1]["body"])
@@ -130,13 +131,13 @@ class WorkflowClientTests(unittest.TestCase):
             client.models.classify_image(
                 "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
             )
-            client.workflows.run("prostate-heatmap", workflow_request())
+            client.builders.run("heatmap", builder_request())
 
         self.assertEqual(
             paths,
             [
                 "/model-service/classifier",
-                "/model-service/v1/workflows/prostate-heatmap/run",
+                "/model-service/v1/builders/heatmap/run",
             ],
         )
 
@@ -174,10 +175,8 @@ class WorkflowClientTests(unittest.TestCase):
             client.models.classify_image(
                 "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
             )
-            client.workflows.run("prostate-heatmap", workflow_request())
-            scheduled = client.workflows.schedule(
-                "prostate-heatmap", workflow_request()
-            )
+            client.builders.run("heatmap", builder_request())
+            scheduled = client.builders.schedule("heatmap", builder_request())
             client.executions.get(scheduled.execution.id)
             client.executions.cancel(scheduled.execution.id)
 
@@ -185,8 +184,8 @@ class WorkflowClientTests(unittest.TestCase):
             requests,
             [
                 ("POST", "/model-service/classifier"),
-                ("POST", "/model-service/v1/workflows/prostate-heatmap/run"),
-                ("POST", "/model-service/v1/workflows/prostate-heatmap/schedule"),
+                ("POST", "/model-service/v1/builders/heatmap/run"),
+                ("POST", "/model-service/v1/builders/heatmap/schedule"),
                 ("GET", "/model-service/v1/executions/execution-1"),
                 ("POST", "/model-service/v1/executions/execution-1/cancel"),
             ],
@@ -223,18 +222,16 @@ class WorkflowClientTests(unittest.TestCase):
             base_url="http://model-service",
             transport=httpx.MockTransport(handler),
         ) as client:
-            result = client.workflows.run(
-                "prostate-heatmap",
-                workflow_request(),
-                workflow_timeout_seconds=30,
+            result = client.builders.run(
+                "heatmap",
+                builder_request(),
+                run_timeout_seconds=30,
             )
 
-        self.assertEqual(captured[0].url.path, "/v1/workflows/prostate-heatmap/run")
+        self.assertEqual(captured[0].url.path, "/v1/builders/heatmap/run")
         body = json.loads(captured[0].content)
         self.assertEqual(body["inputs"]["slide"]["kind"], "shared_path")
-        self.assertEqual(
-            workflow_request().inputs["slide"].kind, WorkflowInputKind.SHARED_PATH
-        )
+        self.assertEqual(builder_request().inputs["slide"].kind, InputKind.SHARED_PATH)
         self.assertEqual(body["input_access"]["kind"], "shared_storage")
         self.assertEqual(body["output_path"], "outputs/heatmap.tiff")
         self.assertNotIn("resolved_configuration", body)
@@ -247,7 +244,7 @@ class WorkflowClientTests(unittest.TestCase):
             ),
         )
         self.assertEqual(result.outputs["summary"], InlineOutput({"tiles": 42}))
-        self.assertEqual(result.outputs["summary"].kind, WorkflowOutputKind.INLINE)
+        self.assertEqual(result.outputs["summary"].kind, OutputKind.INLINE)
 
     def test_generated_idempotency_key_is_reused_for_schedule_retry(self) -> None:
         payloads: list[dict[str, object]] = []
@@ -265,9 +262,9 @@ class WorkflowClientTests(unittest.TestCase):
             base_url="http://model-service",
             transport=httpx.MockTransport(handler),
         ) as client:
-            scheduled = client.workflows.schedule(
-                "prostate-heatmap",
-                workflow_request(),
+            scheduled = client.builders.schedule(
+                "heatmap",
+                builder_request(),
                 requested_timeout_seconds=600,
             )
 
@@ -293,9 +290,9 @@ class WorkflowClientTests(unittest.TestCase):
             base_url="http://model-service",
             transport=httpx.MockTransport(handler),
         ) as client:
-            scheduled = client.workflows.schedule(
-                "prostate-heatmap",
-                workflow_request(),
+            scheduled = client.builders.schedule(
+                "heatmap",
+                builder_request(),
                 idempotency_key="recoverable-key",
             )
 
@@ -305,8 +302,8 @@ class WorkflowClientTests(unittest.TestCase):
 
     def test_public_error_responses_have_distinct_exception_types(self) -> None:
         cases = (
-            ("invalid_schedule_request", 422, InvalidWorkflowRequestError),
-            ("unknown_workflow", 404, UnknownWorkflowError),
+            ("invalid_request", 422, InvalidRequestError),
+            ("unknown_builder", 404, UnknownBuilderError),
             ("schedule_conflict", 409, ScheduleConflictError),
             ("scheduling_unavailable", 503, SchedulingUnavailableError),
         )
@@ -324,9 +321,9 @@ class WorkflowClientTests(unittest.TestCase):
                 ) as client,
                 self.assertRaises(error_type),
             ):
-                client.workflows.schedule(
-                    "prostate-heatmap",
-                    workflow_request(),
+                client.builders.schedule(
+                    "heatmap",
+                    builder_request(),
                     idempotency_key="request-1",
                 )
 
@@ -389,13 +386,13 @@ class WorkflowClientTests(unittest.TestCase):
             base_url="http://model-service",
             transport=httpx.MockTransport(handler),
         ) as client:
-            synchronous = client.workflows.run(
-                "prostate-heatmap",
-                workflow_request(),
+            synchronous = client.builders.run(
+                "heatmap",
+                builder_request(),
             )
-            scheduled = client.workflows.schedule(
-                "prostate-heatmap",
-                workflow_request(),
+            scheduled = client.builders.schedule(
+                "heatmap",
+                builder_request(),
             )
             completed = client.executions.get(scheduled.execution.id)
 
@@ -425,10 +422,8 @@ class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
             await client.models.classify_image(
                 "classifier", np.zeros((2, 2, 3), dtype=np.uint8)
             )
-            await client.workflows.run("prostate-heatmap", workflow_request())
-            scheduled = await client.workflows.schedule(
-                "prostate-heatmap", workflow_request()
-            )
+            await client.builders.run("heatmap", builder_request())
+            scheduled = await client.builders.schedule("heatmap", builder_request())
             await client.executions.get(scheduled.execution.id)
             await client.executions.cancel(scheduled.execution.id)
 
@@ -436,8 +431,8 @@ class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
             requests,
             [
                 ("POST", "/model-service/classifier"),
-                ("POST", "/model-service/v1/workflows/prostate-heatmap/run"),
-                ("POST", "/model-service/v1/workflows/prostate-heatmap/schedule"),
+                ("POST", "/model-service/v1/builders/heatmap/run"),
+                ("POST", "/model-service/v1/builders/heatmap/schedule"),
                 ("GET", "/model-service/v1/executions/execution-1"),
                 ("POST", "/model-service/v1/executions/execution-1/cancel"),
             ],
@@ -466,13 +461,13 @@ class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
             base_url="http://model-service",
             transport=httpx.MockTransport(handler),
         ) as client:
-            result = await client.workflows.run(
-                "prostate-heatmap",
-                workflow_request(),
+            result = await client.builders.run(
+                "heatmap",
+                builder_request(),
             )
-            scheduled = await client.workflows.schedule(
-                "prostate-heatmap",
-                workflow_request(),
+            scheduled = await client.builders.schedule(
+                "heatmap",
+                builder_request(),
                 idempotency_key="async-request",
             )
             execution = await client.executions.get(scheduled.execution.id)
@@ -485,8 +480,8 @@ class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             requests,
             [
-                ("POST", "/v1/workflows/prostate-heatmap/run"),
-                ("POST", "/v1/workflows/prostate-heatmap/schedule"),
+                ("POST", "/v1/builders/heatmap/run"),
+                ("POST", "/v1/builders/heatmap/schedule"),
                 ("GET", "/v1/executions/execution-1"),
                 ("POST", "/v1/executions/execution-1/cancel"),
             ],
@@ -495,3 +490,61 @@ class AsyncWorkflowClientTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CatalogTests(unittest.TestCase):
+    def test_models_and_builders_are_listed(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/v1/models":
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "id": "virchow2",
+                            "contract": "tile-embedding",
+                            "parameters": {"tile_size": 224, "mpp": 0.5},
+                            "builders": ["tile-embeddings"],
+                        }
+                    ],
+                )
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "heatmap",
+                        "accepts": "spatial-scores",
+                        "inputs": {"slide": {"required": True, "media_type": None}},
+                        "outputs": {"heatmap": {"kind": "shared_artifact"}},
+                        "configuration": {"stride_fraction": 0.5},
+                    }
+                ],
+            )
+
+        with rationai.Client(
+            base_url="http://model-service", transport=httpx.MockTransport(handler)
+        ) as client:
+            models = client.models.list()
+            builders = client.builders.list()
+
+        self.assertEqual(models[0].builders, ["tile-embeddings"])
+        self.assertEqual(models[0].parameters["mpp"], 0.5)
+        self.assertEqual(builders[0].accepts, "spatial-scores")
+
+    def test_model_selection_errors_have_their_own_types(self) -> None:
+        cases = {
+            "unknown_model": rationai.UnknownModelError,
+            "incompatible_model": rationai.IncompatibleModelError,
+            "unknown_builder": rationai.UnknownBuilderError,
+        }
+        for code, error_type in cases.items():
+            with (
+                self.subTest(code=code),
+                rationai.Client(
+                    base_url="http://model-service",
+                    transport=httpx.MockTransport(
+                        lambda _request, code=code: api_error(code, 404)
+                    ),
+                ) as client,
+                self.assertRaises(error_type),
+            ):
+                client.builders.run("heatmap", builder_request())

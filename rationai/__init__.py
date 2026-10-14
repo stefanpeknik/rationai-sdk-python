@@ -1,25 +1,29 @@
 from rationai.client import AsyncClient, Client
 from rationai.errors import (
-    InvalidWorkflowRequestError,
+    BuilderBackpressureError,
+    BuilderUnavailableError,
+    IncompatibleModelError,
+    InvalidRequestError,
     RationAIAPIError,
     ScheduleConflictError,
     SchedulingUnavailableError,
+    UnknownBuilderError,
     UnknownExecutionError,
-    UnknownWorkflowError,
-    WorkflowBackpressureError,
-    WorkflowDispatchUnavailableError,
+    UnknownModelError,
 )
 
 
 __all__ = [
     "AsyncClient",
+    "BuilderBackpressureError",
+    "BuilderUnavailableError",
     "Client",
-    "InvalidWorkflowRequestError",
+    "IncompatibleModelError",
+    "InvalidRequestError",
     "RationAIAPIError",
     "ScheduleConflictError",
     "SchedulingUnavailableError",
+    "UnknownBuilderError",
     "UnknownExecutionError",
-    "UnknownWorkflowError",
-    "WorkflowBackpressureError",
-    "WorkflowDispatchUnavailableError",
+    "UnknownModelError",
 ]

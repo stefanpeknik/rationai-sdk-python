@@ -9,14 +9,15 @@ if TYPE_CHECKING:
 
 
 class APIErrorCode(StrEnum):
-    INVALID_SCHEDULE_REQUEST = "invalid_schedule_request"
-    INVALID_WORKFLOW_INVOCATION = "invalid_workflow_invocation"
-    UNKNOWN_WORKFLOW = "unknown_workflow"
+    INVALID_REQUEST = "invalid_request"
+    UNKNOWN_BUILDER = "unknown_builder"
+    UNKNOWN_MODEL = "unknown_model"
+    INCOMPATIBLE_MODEL = "incompatible_model"
     SCHEDULE_CONFLICT = "schedule_conflict"
     SCHEDULING_UNAVAILABLE = "scheduling_unavailable"
     UNKNOWN_EXECUTION = "unknown_execution"
-    WORKFLOW_BACKPRESSURE = "workflow_backpressure"
-    WORKFLOW_DISPATCH_UNAVAILABLE = "workflow_dispatch_unavailable"
+    BUILDER_BACKPRESSURE = "builder_backpressure"
+    BUILDER_UNAVAILABLE = "builder_unavailable"
 
 
 class RationAIAPIError(RuntimeError):
@@ -34,11 +35,19 @@ class RationAIAPIError(RuntimeError):
         self.retryable = retryable
 
 
-class InvalidWorkflowRequestError(RationAIAPIError):
+class InvalidRequestError(RationAIAPIError):
     pass
 
 
-class UnknownWorkflowError(RationAIAPIError):
+class UnknownBuilderError(RationAIAPIError):
+    pass
+
+
+class UnknownModelError(RationAIAPIError):
+    pass
+
+
+class IncompatibleModelError(RationAIAPIError):
     pass
 
 
@@ -54,23 +63,24 @@ class UnknownExecutionError(RationAIAPIError):
     pass
 
 
-class WorkflowBackpressureError(RationAIAPIError):
+class BuilderBackpressureError(RationAIAPIError):
     pass
 
 
-class WorkflowDispatchUnavailableError(RationAIAPIError):
+class BuilderUnavailableError(RationAIAPIError):
     pass
 
 
 _ERROR_TYPES: dict[str, type[RationAIAPIError]] = {
-    APIErrorCode.INVALID_SCHEDULE_REQUEST: InvalidWorkflowRequestError,
-    APIErrorCode.INVALID_WORKFLOW_INVOCATION: InvalidWorkflowRequestError,
-    APIErrorCode.UNKNOWN_WORKFLOW: UnknownWorkflowError,
+    APIErrorCode.INVALID_REQUEST: InvalidRequestError,
+    APIErrorCode.UNKNOWN_BUILDER: UnknownBuilderError,
+    APIErrorCode.UNKNOWN_MODEL: UnknownModelError,
+    APIErrorCode.INCOMPATIBLE_MODEL: IncompatibleModelError,
     APIErrorCode.SCHEDULE_CONFLICT: ScheduleConflictError,
     APIErrorCode.SCHEDULING_UNAVAILABLE: SchedulingUnavailableError,
     APIErrorCode.UNKNOWN_EXECUTION: UnknownExecutionError,
-    APIErrorCode.WORKFLOW_BACKPRESSURE: WorkflowBackpressureError,
-    APIErrorCode.WORKFLOW_DISPATCH_UNAVAILABLE: WorkflowDispatchUnavailableError,
+    APIErrorCode.BUILDER_BACKPRESSURE: BuilderBackpressureError,
+    APIErrorCode.BUILDER_UNAVAILABLE: BuilderUnavailableError,
 }
 
 

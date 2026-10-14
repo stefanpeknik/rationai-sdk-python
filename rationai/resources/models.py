@@ -9,9 +9,19 @@ from numpy.typing import NDArray
 from PIL.Image import Image
 
 from rationai._resource import APIResource, AsyncAPIResource
+from rationai.errors import raise_for_api_error
+from rationai.types.builders import ModelInfo
 
 
 class Models(APIResource):
+    def list(
+        self, *, timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT
+    ) -> list[ModelInfo]:
+        """List deployed models with their contracts and compatible builders."""
+        response = self._get("v1/models", timeout=timeout)
+        raise_for_api_error(response)
+        return [ModelInfo.from_dict(item) for item in response.json()]
+
     def classify_image(
         self,
         model: str,
@@ -111,6 +121,14 @@ class Models(APIResource):
 
 
 class AsyncModels(AsyncAPIResource):
+    async def list(
+        self, *, timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT
+    ) -> list[ModelInfo]:
+        """List deployed models with their contracts and compatible builders."""
+        response = await self._get("v1/models", timeout=timeout)
+        raise_for_api_error(response)
+        return [ModelInfo.from_dict(item) for item in response.json()]
+
     async def classify_image(
         self,
         model: str,

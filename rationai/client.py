@@ -9,11 +9,11 @@ from httpx._types import TimeoutTypes
 
 
 if TYPE_CHECKING:
+    from rationai.resources.builders import AsyncBuilders, Builders
     from rationai.resources.executions import AsyncExecutions, Executions
     from rationai.resources.models import AsyncModels, Models
     from rationai.resources.qc import AsyncQualityControl, QualityControl
     from rationai.resources.slide import AsyncSlide, Slide
-    from rationai.resources.workflows import AsyncWorkflows, Workflows
 
 
 DEFAULT_MODEL_SERVICE_URL = (
@@ -78,10 +78,10 @@ class Client(httpx.Client):
         return QualityControl(self, base_url=self.qc_base_url)
 
     @cached_property
-    def workflows(self) -> Workflows:
-        from rationai.resources.workflows import Workflows
+    def builders(self) -> Builders:
+        from rationai.resources.builders import Builders
 
-        return Workflows(self, base_url=self.base_url)
+        return Builders(self, base_url=self.base_url)
 
     @cached_property
     def executions(self) -> Executions:
@@ -132,10 +132,10 @@ class AsyncClient(httpx.AsyncClient):
         return AsyncQualityControl(self, base_url=self.qc_base_url)
 
     @cached_property
-    def workflows(self) -> AsyncWorkflows:
-        from rationai.resources.workflows import AsyncWorkflows
+    def builders(self) -> AsyncBuilders:
+        from rationai.resources.builders import AsyncBuilders
 
-        return AsyncWorkflows(self, base_url=self.base_url)
+        return AsyncBuilders(self, base_url=self.base_url)
 
     @cached_property
     def executions(self) -> AsyncExecutions:

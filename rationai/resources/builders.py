@@ -19,49 +19,57 @@ from rationai.errors import (
     api_error,
     raise_for_api_error,
 )
-from rationai.types.workflows import ScheduledExecution, WorkflowResult
+from rationai.types.builders import BuilderInfo, BuilderResult, ScheduledExecution
 
 
 if TYPE_CHECKING:
-    from rationai.types.workflows import WorkflowRequest
+    from rationai.types.builders import BuilderRequest
 
 
 _SCHEDULE_ATTEMPTS = 3
 
 
-class Workflows(APIResource):
+class Builders(APIResource):
+    def list(
+        self, *, timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT
+    ) -> list[BuilderInfo]:
+        """List builders with the inference contract each accepts."""
+        response = self._get("v1/builders", timeout=timeout)
+        raise_for_api_error(response)
+        return [BuilderInfo.from_dict(item) for item in response.json()]
+
     def run(
         self,
-        workflow_id: str,
-        request: WorkflowRequest,
+        builder_id: str,
+        request: BuilderRequest,
         *,
-        workflow_timeout_seconds: float = 3600,
+        run_timeout_seconds: float = 3600,
         timeout: TimeoutTypes | UseClientDefault = None,
-    ) -> WorkflowResult:
-        """Run a workflow and wait for its result.
+    ) -> BuilderResult:
+        """Run a builder with the request's model and wait for its outputs.
 
         Args:
-            workflow_id: Registered workflow name.
-            request: Typed inputs, configuration, and input access.
-            workflow_timeout_seconds: Server-side deadline from the time of this call.
+            builder_id: Builder such as "heatmap" or "tile-embeddings".
+            request: Selected model, inputs and input access.
+            run_timeout_seconds: Server-side deadline from the time of this call.
             timeout: HTTP timeout; defaults to no timeout for this request.
 
         Returns:
-            The workflow outputs.
+            The builder outputs.
         """
-        body = _run_body(request, workflow_timeout_seconds)
+        body = _run_body(request, run_timeout_seconds)
         response = self._post(
-            f"v1/workflows/{quote(workflow_id, safe='')}/run",
+            f"v1/builders/{quote(builder_id, safe='')}/run",
             json=body,
             timeout=timeout,
         )
         raise_for_api_error(response)
-        return WorkflowResult.from_dict(response.json())
+        return BuilderResult.from_dict(response.json())
 
     def schedule(
         self,
-        workflow_id: str,
-        request: WorkflowRequest,
+        builder_id: str,
+        request: BuilderRequest,
         *,
         requested_timeout_seconds: int | None = None,
         idempotency_key: str | None = None,
@@ -70,8 +78,8 @@ class Workflows(APIResource):
         """Submit durable work, reusing the same key during transient retries.
 
         Args:
-            workflow_id: Registered workflow name.
-            request: Typed inputs, configuration, and input access.
+            builder_id: Builder such as "heatmap" or "tile-embeddings".
+            request: Selected model, inputs and input access.
             requested_timeout_seconds: Optional server-side execution deadline.
             idempotency_key: Recovery key; generated if omitted. Reuse the same
                 key after a client restart to recover an ambiguous submission.
@@ -85,7 +93,7 @@ class Workflows(APIResource):
         for attempt in range(_SCHEDULE_ATTEMPTS):
             try:
                 response = self._post(
-                    f"v1/workflows/{quote(workflow_id, safe='')}/schedule",
+                    f"v1/builders/{quote(builder_id, safe='')}/schedule",
                     json=body,
                     timeout=timeout,
                 )
@@ -105,39 +113,47 @@ class Workflows(APIResource):
         raise AssertionError("schedule retry loop did not return or raise")
 
 
-class AsyncWorkflows(AsyncAPIResource):
+class AsyncBuilders(AsyncAPIResource):
+    async def list(
+        self, *, timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT
+    ) -> list[BuilderInfo]:
+        """List builders with the inference contract each accepts."""
+        response = await self._get("v1/builders", timeout=timeout)
+        raise_for_api_error(response)
+        return [BuilderInfo.from_dict(item) for item in response.json()]
+
     async def run(
         self,
-        workflow_id: str,
-        request: WorkflowRequest,
+        builder_id: str,
+        request: BuilderRequest,
         *,
-        workflow_timeout_seconds: float = 3600,
+        run_timeout_seconds: float = 3600,
         timeout: TimeoutTypes | UseClientDefault = None,
-    ) -> WorkflowResult:
-        """Run a workflow and wait for its result.
+    ) -> BuilderResult:
+        """Run a builder with the request's model and wait for its outputs.
 
         Args:
-            workflow_id: Registered workflow name.
-            request: Typed inputs, configuration, and input access.
-            workflow_timeout_seconds: Server-side deadline from the time of this call.
+            builder_id: Builder such as "heatmap" or "tile-embeddings".
+            request: Selected model, inputs and input access.
+            run_timeout_seconds: Server-side deadline from the time of this call.
             timeout: HTTP timeout; defaults to no timeout for this request.
 
         Returns:
-            The workflow outputs.
+            The builder outputs.
         """
-        body = _run_body(request, workflow_timeout_seconds)
+        body = _run_body(request, run_timeout_seconds)
         response = await self._post(
-            f"v1/workflows/{quote(workflow_id, safe='')}/run",
+            f"v1/builders/{quote(builder_id, safe='')}/run",
             json=body,
             timeout=timeout,
         )
         raise_for_api_error(response)
-        return WorkflowResult.from_dict(response.json())
+        return BuilderResult.from_dict(response.json())
 
     async def schedule(
         self,
-        workflow_id: str,
-        request: WorkflowRequest,
+        builder_id: str,
+        request: BuilderRequest,
         *,
         requested_timeout_seconds: int | None = None,
         idempotency_key: str | None = None,
@@ -146,8 +162,8 @@ class AsyncWorkflows(AsyncAPIResource):
         """Submit durable work, reusing the same key during transient retries.
 
         Args:
-            workflow_id: Registered workflow name.
-            request: Typed inputs, configuration, and input access.
+            builder_id: Builder such as "heatmap" or "tile-embeddings".
+            request: Selected model, inputs and input access.
             requested_timeout_seconds: Optional server-side execution deadline.
             idempotency_key: Recovery key; generated if omitted. Reuse the same
                 key after a client restart to recover an ambiguous submission.
@@ -161,7 +177,7 @@ class AsyncWorkflows(AsyncAPIResource):
         for attempt in range(_SCHEDULE_ATTEMPTS):
             try:
                 response = await self._post(
-                    f"v1/workflows/{quote(workflow_id, safe='')}/schedule",
+                    f"v1/builders/{quote(builder_id, safe='')}/schedule",
                     json=body,
                     timeout=timeout,
                 )
@@ -182,25 +198,25 @@ class AsyncWorkflows(AsyncAPIResource):
 
 
 def _run_body(
-    request: WorkflowRequest,
-    workflow_timeout_seconds: float,
+    request: BuilderRequest,
+    run_timeout_seconds: float,
 ) -> dict[str, object]:
     if (
-        not isinstance(workflow_timeout_seconds, int | float)
-        or isinstance(workflow_timeout_seconds, bool)
-        or workflow_timeout_seconds <= 0
+        not isinstance(run_timeout_seconds, int | float)
+        or isinstance(run_timeout_seconds, bool)
+        or run_timeout_seconds <= 0
     ):
-        raise ValueError("workflow_timeout_seconds must be positive")
+        raise ValueError("run_timeout_seconds must be positive")
     return {
         **request.to_dict(),
         "deadline_at": (
-            datetime.now(UTC) + timedelta(seconds=workflow_timeout_seconds)
+            datetime.now(UTC) + timedelta(seconds=run_timeout_seconds)
         ).isoformat(),
     }
 
 
 def _schedule_body(
-    request: WorkflowRequest,
+    request: BuilderRequest,
     requested_timeout_seconds: int | None,
     idempotency_key: str,
 ) -> dict[str, object]:

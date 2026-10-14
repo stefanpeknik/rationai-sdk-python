@@ -12,7 +12,7 @@ Both clients expose the same high-level resources:
 - `client.models` for image classification/segmentation
 - `client.qc` for quality control endpoints
 - `client.slide` for slide-level operations (e.g. heatmaps)
-- `client.workflows` for immediate and scheduled workflow runs
+- `client.builders` for immediate and scheduled builder runs with a selected model
 - `client.executions` for polling and cancelling scheduled runs
 
 ### What’s the actual difference?
@@ -126,5 +126,5 @@ client = Client(
 ```
 
 Existing code can pass `models_base_url` instead of `base_url`; both configure
-the same model-service origin. See [Workflows](../../reference/resources/workflows.md)
+the same model-service origin. See [Builders](../../reference/resources/builders.md)
 for a request example.

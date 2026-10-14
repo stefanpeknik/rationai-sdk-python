@@ -7,39 +7,40 @@ from uuid import uuid4
 
 import rationai
 from rationai.types import (
+    BuilderRequest,
     ExecutionStatus,
     InputAccess,
     SharedPathInput,
-    WorkflowRequest,
 )
 
 
-class WorkflowIntegrationTests(unittest.TestCase):
+class BuilderIntegrationTests(unittest.TestCase):
     def test_run_and_schedule_return_equivalent_results(self) -> None:
         required = {
             name: os.environ.get(name)
             for name in (
                 "RATIONAI_MODEL_SERVICE_URL",
-                "RATIONAI_WORKFLOW_SHARED_ROOT",
-                "RATIONAI_WORKFLOW_SLIDE_PATH",
-                "RATIONAI_WORKFLOW_ROI_PATH",
+                "RATIONAI_BUILDER_SHARED_ROOT",
+                "RATIONAI_BUILDER_SLIDE_PATH",
+                "RATIONAI_BUILDER_ROI_PATH",
             )
         }
         missing = tuple(name for name, value in required.items() if not value)
         if missing:
-            self.skipTest("workflow integration environment is not configured")
+            self.skipTest("builder integration environment is not configured")
         service_url = required["RATIONAI_MODEL_SERVICE_URL"]
-        shared_root = required["RATIONAI_WORKFLOW_SHARED_ROOT"]
-        slide_path = required["RATIONAI_WORKFLOW_SLIDE_PATH"]
-        roi_path = required["RATIONAI_WORKFLOW_ROI_PATH"]
+        shared_root = required["RATIONAI_BUILDER_SHARED_ROOT"]
+        slide_path = required["RATIONAI_BUILDER_SLIDE_PATH"]
+        roi_path = required["RATIONAI_BUILDER_ROI_PATH"]
         assert service_url is not None
         assert shared_root is not None
         assert slide_path is not None
         assert roi_path is not None
         timeout_seconds = int(
-            os.environ.get("RATIONAI_WORKFLOW_TIMEOUT_SECONDS", "3600")
+            os.environ.get("RATIONAI_BUILDER_TIMEOUT_SECONDS", "3600")
         )
-        request = WorkflowRequest(
+        request = BuilderRequest(
+            model_id=os.environ.get("RATIONAI_TEST_MODEL", "prostate-classifier-1"),
             inputs={
                 "slide": SharedPathInput(slide_path),
                 "region_of_interest": SharedPathInput(roi_path),
@@ -52,13 +53,13 @@ class WorkflowIntegrationTests(unittest.TestCase):
         )
 
         with rationai.Client(base_url=service_url) as client:
-            synchronous = client.workflows.run(
-                "prostate-heatmap",
+            synchronous = client.builders.run(
+                "heatmap",
                 request,
-                workflow_timeout_seconds=timeout_seconds,
+                run_timeout_seconds=timeout_seconds,
             )
-            scheduled = client.workflows.schedule(
-                "prostate-heatmap",
+            scheduled = client.builders.schedule(
+                "heatmap",
                 request,
                 requested_timeout_seconds=timeout_seconds,
                 idempotency_key=f"sdk-integration-{uuid4()}",

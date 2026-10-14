@@ -18,36 +18,29 @@ class ExecutionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class WorkflowInputKind(StrEnum):
-    INLINE = "inline"
+class InputKind(StrEnum):
     SHARED_PATH = "shared_path"
     PROVIDER = "provider"
 
 
-class WorkflowOutputKind(StrEnum):
+class OutputKind(StrEnum):
     INLINE = "inline"
     SHARED_ARTIFACT = "shared_artifact"
 
 
 @dataclass(frozen=True, slots=True)
-class InlineInput:
-    value: JsonValue
-    kind: Literal[WorkflowInputKind.INLINE] = WorkflowInputKind.INLINE
-
-
-@dataclass(frozen=True, slots=True)
 class SharedPathInput:
     path: str
-    kind: Literal[WorkflowInputKind.SHARED_PATH] = WorkflowInputKind.SHARED_PATH
+    kind: Literal[InputKind.SHARED_PATH] = InputKind.SHARED_PATH
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderInput:
     name: str
-    kind: Literal[WorkflowInputKind.PROVIDER] = WorkflowInputKind.PROVIDER
+    kind: Literal[InputKind.PROVIDER] = InputKind.PROVIDER
 
 
-type WorkflowInput = InlineInput | SharedPathInput | ProviderInput
+type BuilderInput = SharedPathInput | ProviderInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,18 +50,21 @@ class InputAccess:
 
 
 @dataclass(frozen=True, slots=True)
-class WorkflowRequest:
-    """Supply workflow inputs and access, optionally choosing an output destination.
+class BuilderRequest:
+    """Select a model and supply the builder's inputs and their access.
 
-    Processing settings are owned by model-service and selected at execution time.
+    Processing settings belong to model-service and are chosen when each attempt
+    starts; `output_path` optionally places the builder's artifact.
     """
 
-    inputs: dict[str, WorkflowInput]
+    model_id: str
+    inputs: dict[str, BuilderInput]
     input_access: InputAccess
     output_path: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         body: dict[str, object] = {
+            "model_id": self.model_id,
             "inputs": {name: asdict(value) for name, value in self.inputs.items()},
             "input_access": asdict(self.input_access),
         }
@@ -80,29 +76,27 @@ class WorkflowRequest:
 @dataclass(frozen=True, slots=True)
 class InlineOutput:
     value: JsonValue
-    kind: Literal[WorkflowOutputKind.INLINE] = WorkflowOutputKind.INLINE
+    kind: Literal[OutputKind.INLINE] = OutputKind.INLINE
 
 
 @dataclass(frozen=True, slots=True)
 class SharedArtifact:
     path: str
     media_type: str | None = None
-    kind: Literal[WorkflowOutputKind.SHARED_ARTIFACT] = (
-        WorkflowOutputKind.SHARED_ARTIFACT
-    )
+    kind: Literal[OutputKind.SHARED_ARTIFACT] = OutputKind.SHARED_ARTIFACT
 
 
-type WorkflowOutput = InlineOutput | SharedArtifact
+type BuilderOutput = InlineOutput | SharedArtifact
 
 
 @dataclass(frozen=True, slots=True)
-class WorkflowResult:
-    outputs: dict[str, WorkflowOutput]
+class BuilderResult:
+    outputs: dict[str, BuilderOutput]
 
     @classmethod
-    def from_dict(cls, value: object) -> WorkflowResult:
-        mapping = _mapping(value, "workflow result")
-        outputs = _mapping(mapping.get("outputs"), "workflow outputs")
+    def from_dict(cls, value: object) -> BuilderResult:
+        mapping = _mapping(value, "builder result")
+        outputs = _mapping(mapping.get("outputs"), "builder outputs")
         return cls({name: _output(output) for name, output in outputs.items()})
 
 
@@ -115,9 +109,10 @@ class ExecutionError:
 @dataclass(frozen=True, slots=True)
 class Execution:
     id: str
-    workflow_id: str
+    builder_id: str
+    model_id: str
     status: ExecutionStatus
-    result: WorkflowResult | None = None
+    result: BuilderResult | None = None
     error: ExecutionError | None = None
 
     @classmethod
@@ -131,12 +126,61 @@ class Execution:
         raw_error = mapping.get("error")
         return cls(
             id=_string(mapping, "id"),
-            workflow_id=_string(mapping, "workflow_id"),
+            builder_id=_string(mapping, "builder_id"),
+            model_id=_string(mapping, "model_id"),
             status=status,
-            result=WorkflowResult.from_dict(raw_result)
+            result=BuilderResult.from_dict(raw_result)
             if raw_result is not None
             else None,
             error=_execution_error(raw_error) if raw_error is not None else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ModelInfo:
+    """A deployed model: its inference contract, parameters and usable builders."""
+
+    id: str
+    contract: str
+    parameters: dict[str, JsonValue]
+    builders: list[str]
+
+    @classmethod
+    def from_dict(cls, value: object) -> ModelInfo:
+        mapping = _mapping(value, "model")
+        parameters = _mapping(mapping.get("parameters"), "model parameters")
+        builders = mapping.get("builders")
+        if not isinstance(builders, list) or not all(
+            isinstance(item, str) for item in builders
+        ):
+            raise ValueError("model builders must be a list of strings")
+        return cls(
+            id=_string(mapping, "id"),
+            contract=_string(mapping, "contract"),
+            parameters=parameters,
+            builders=builders,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BuilderInfo:
+    """A builder: the contract it accepts, its inputs and outputs and defaults."""
+
+    id: str
+    accepts: str
+    inputs: dict[str, JsonValue]
+    outputs: dict[str, JsonValue]
+    configuration: dict[str, JsonValue]
+
+    @classmethod
+    def from_dict(cls, value: object) -> BuilderInfo:
+        mapping = _mapping(value, "builder")
+        return cls(
+            id=_string(mapping, "id"),
+            accepts=_string(mapping, "accepts"),
+            inputs=_mapping(mapping.get("inputs"), "builder inputs"),
+            outputs=_mapping(mapping.get("outputs"), "builder outputs"),
+            configuration=_mapping(mapping.get("configuration"), "configuration"),
         )
 
 
@@ -164,19 +208,19 @@ class ScheduledExecution:
         )
 
 
-def _output(value: object) -> WorkflowOutput:
-    mapping = _mapping(value, "workflow output")
+def _output(value: object) -> BuilderOutput:
+    mapping = _mapping(value, "builder output")
     kind = mapping.get("kind")
-    if kind == WorkflowOutputKind.INLINE:
+    if kind == OutputKind.INLINE:
         inline_value = mapping.get("value")
         _ensure_json(inline_value, "inline output")
         return InlineOutput(inline_value)
-    if kind == WorkflowOutputKind.SHARED_ARTIFACT:
+    if kind == OutputKind.SHARED_ARTIFACT:
         media_type = mapping.get("media_type")
         if media_type is not None and not isinstance(media_type, str):
             raise ValueError("shared artifact media_type must be a string or null")
         return SharedArtifact(_string(mapping, "path"), media_type)
-    raise ValueError("workflow output has an unknown kind")
+    raise ValueError("builder output has an unknown kind")
 
 
 def _execution_error(value: object) -> ExecutionError:
