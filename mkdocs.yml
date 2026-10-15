@@ -19,6 +19,7 @@ nav:
       - Types:
           - QC types: reference/types/qc.md
           - Builder types: reference/types/builders.md
+          - Inference types: reference/types/inference.md
 
 theme:
   name: material

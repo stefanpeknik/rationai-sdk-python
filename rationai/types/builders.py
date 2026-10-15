@@ -107,31 +107,84 @@ class ExecutionError:
 
 
 @dataclass(frozen=True, slots=True)
+class InferenceResult:
+    """A stored raw model response; download it with `executions.result`."""
+
+    media_type: str | None
+    headers: dict[str, str]
+    size: int
+
+    @classmethod
+    def from_dict(cls, value: object) -> InferenceResult:
+        mapping = _mapping(value, "inference result")
+        media_type = mapping.get("media_type")
+        headers = _mapping(mapping.get("headers"), "inference result headers")
+        size = mapping.get("size")
+        if media_type is not None and not isinstance(media_type, str):
+            raise ValueError("inference result media_type must be a string or null")
+        if not all(isinstance(item, str) for item in headers.values()):
+            raise ValueError("inference result headers must be strings")
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise ValueError("inference result size must be a non-negative integer")
+        return cls(media_type, headers, size)
+
+
+class Operation(StrEnum):
+    BUILDER = "builder"
+    INFERENCE = "inference"
+
+
+@dataclass(frozen=True, slots=True)
 class Execution:
+    """A durable execution of a builder, or of one raw model request.
+
+    `builder_id` is None for raw inference.
+    """
+
     id: str
-    builder_id: str
+    operation: Operation
+    builder_id: str | None
     model_id: str
     status: ExecutionStatus
-    result: BuilderResult | None = None
+    result: BuilderResult | InferenceResult | None = None
     error: ExecutionError | None = None
+
+    @property
+    def finished(self) -> bool:
+        return self.status in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }
 
     @classmethod
     def from_dict(cls, value: object) -> Execution:
         mapping = _mapping(value, "execution")
         try:
             status = ExecutionStatus(_string(mapping, "status"))
+            operation = Operation(mapping.get("operation", Operation.BUILDER))
         except ValueError as error:
-            raise ValueError("execution has an unknown status") from error
+            raise ValueError("execution has an unknown status or operation") from error
         raw_result = mapping.get("result")
         raw_error = mapping.get("error")
+        result: BuilderResult | InferenceResult | None = None
+        if raw_result is not None:
+            result = (
+                InferenceResult.from_dict(raw_result)
+                if operation is Operation.INFERENCE
+                else BuilderResult.from_dict(raw_result)
+            )
         return cls(
             id=_string(mapping, "id"),
-            builder_id=_string(mapping, "builder_id"),
+            operation=operation,
+            builder_id=(
+                _string(mapping, "builder_id")
+                if operation is Operation.BUILDER
+                else None
+            ),
             model_id=_string(mapping, "model_id"),
             status=status,
-            result=BuilderResult.from_dict(raw_result)
-            if raw_result is not None
-            else None,
+            result=result,
             error=_execution_error(raw_error) if raw_error is not None else None,
         )
 

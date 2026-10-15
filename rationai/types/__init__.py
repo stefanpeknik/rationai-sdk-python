@@ -5,16 +5,19 @@ from rationai.types.builders import (
     Execution,
     ExecutionError,
     ExecutionStatus,
+    InferenceResult,
     InlineOutput,
     InputAccess,
     InputKind,
     ModelInfo,
+    Operation,
     OutputKind,
     ProviderInput,
     ScheduledExecution,
     SharedArtifact,
     SharedPathInput,
 )
+from rationai.types.inference import InferenceResponse
 from rationai.types.qc import SlideCheckConfig, SlideCheckResult
 
 
@@ -25,10 +28,13 @@ __all__ = [
     "Execution",
     "ExecutionError",
     "ExecutionStatus",
+    "InferenceResponse",
+    "InferenceResult",
     "InlineOutput",
     "InputAccess",
     "InputKind",
     "ModelInfo",
+    "Operation",
     "OutputKind",
     "ProviderInput",
     "ScheduledExecution",

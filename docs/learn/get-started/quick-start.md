@@ -9,11 +9,11 @@ This SDK provides two clients:
 
 Both clients expose the same high-level resources:
 
-- `client.models` for image classification/segmentation
+- `client.models` for image classification/segmentation, and for scheduling single tiles
 - `client.qc` for quality control endpoints
 - `client.slide` for slide-level operations (e.g. heatmaps)
 - `client.builders` for immediate and scheduled builder runs with a selected model
-- `client.executions` for polling and cancelling scheduled runs
+- `client.executions` for polling, waiting on, cancelling and downloading scheduled work
 
 ### What’s the actual difference?
 
@@ -128,3 +128,31 @@ client = Client(
 Existing code can pass `models_base_url` instead of `base_url`; both configure
 the same model-service origin. See [Builders](../../reference/resources/builders.md)
 for a request example.
+
+## Scheduling tiles
+
+If you tile a slide yourself, schedule the tiles instead of holding one request
+open per tile. model-service stores each tile, runs it when a model replica is
+available (a cold GPU worker can take minutes) and keeps the response for a day.
+
+```python
+import numpy as np
+import rationai
+
+with rationai.Client() as client:
+    ids = [
+        client.models.schedule("virchow2", tile, output_dtype=np.float16).execution.id
+        for tile in tiles  # uint8 RGB arrays of the model's tile size
+    ]
+    finished = client.executions.wait(ids)
+    embeddings = [
+        client.executions.result(execution.id).array(np.float16)
+        for execution in finished
+        if execution.status == "succeeded"
+    ]
+```
+
+A classifier's response decodes with `.json()`. Each call to `schedule` gets an
+idempotency key (returned as `scheduled.idempotency_key`); pass the same key
+again after a client crash to recover the submission instead of duplicating it.
+

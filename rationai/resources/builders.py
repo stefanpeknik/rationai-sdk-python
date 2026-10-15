@@ -13,20 +13,19 @@ from httpx._client import UseClientDefault
 from httpx._types import TimeoutTypes
 
 from rationai._resource import APIResource, AsyncAPIResource
-from rationai.errors import (
-    APIErrorCode,
-    SchedulingUnavailableError,
-    api_error,
-    raise_for_api_error,
+from rationai.errors import raise_for_api_error
+from rationai.resources._scheduling import (
+    SCHEDULE_ATTEMPTS,
+    check_timeout,
+    retry_delay,
+    scheduling_unavailable,
+    transport_unavailable,
 )
 from rationai.types.builders import BuilderInfo, BuilderResult, ScheduledExecution
 
 
 if TYPE_CHECKING:
     from rationai.types.builders import BuilderRequest
-
-
-_SCHEDULE_ATTEMPTS = 3
 
 
 class Builders(APIResource):
@@ -90,7 +89,7 @@ class Builders(APIResource):
         """
         key = idempotency_key or str(uuid4())
         body = _schedule_body(request, requested_timeout_seconds, key)
-        for attempt in range(_SCHEDULE_ATTEMPTS):
+        for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = self._post(
                     f"v1/builders/{quote(builder_id, safe='')}/schedule",
@@ -98,12 +97,12 @@ class Builders(APIResource):
                     timeout=timeout,
                 )
             except httpx.TransportError as error:
-                if attempt + 1 == _SCHEDULE_ATTEMPTS:
-                    raise _transport_unavailable() from error
-                time.sleep(_retry_delay(None, attempt))
+                if attempt + 1 == SCHEDULE_ATTEMPTS:
+                    raise transport_unavailable() from error
+                time.sleep(retry_delay(None, attempt))
                 continue
-            if _scheduling_unavailable(response) and attempt + 1 < _SCHEDULE_ATTEMPTS:
-                time.sleep(_retry_delay(response, attempt))
+            if scheduling_unavailable(response) and attempt + 1 < SCHEDULE_ATTEMPTS:
+                time.sleep(retry_delay(response, attempt))
                 continue
             raise_for_api_error(response)
             return ScheduledExecution.from_dict(
@@ -174,7 +173,7 @@ class AsyncBuilders(AsyncAPIResource):
         """
         key = idempotency_key or str(uuid4())
         body = _schedule_body(request, requested_timeout_seconds, key)
-        for attempt in range(_SCHEDULE_ATTEMPTS):
+        for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = await self._post(
                     f"v1/builders/{quote(builder_id, safe='')}/schedule",
@@ -182,12 +181,12 @@ class AsyncBuilders(AsyncAPIResource):
                     timeout=timeout,
                 )
             except httpx.TransportError as error:
-                if attempt + 1 == _SCHEDULE_ATTEMPTS:
-                    raise _transport_unavailable() from error
-                await asyncio.sleep(_retry_delay(None, attempt))
+                if attempt + 1 == SCHEDULE_ATTEMPTS:
+                    raise transport_unavailable() from error
+                await asyncio.sleep(retry_delay(None, attempt))
                 continue
-            if _scheduling_unavailable(response) and attempt + 1 < _SCHEDULE_ATTEMPTS:
-                await asyncio.sleep(_retry_delay(response, attempt))
+            if scheduling_unavailable(response) and attempt + 1 < SCHEDULE_ATTEMPTS:
+                await asyncio.sleep(retry_delay(response, attempt))
                 continue
             raise_for_api_error(response)
             return ScheduledExecution.from_dict(
@@ -220,12 +219,7 @@ def _schedule_body(
     requested_timeout_seconds: int | None,
     idempotency_key: str,
 ) -> dict[str, object]:
-    if requested_timeout_seconds is not None and (
-        not isinstance(requested_timeout_seconds, int)
-        or isinstance(requested_timeout_seconds, bool)
-        or requested_timeout_seconds <= 0
-    ):
-        raise ValueError("requested_timeout_seconds must be a positive integer")
+    check_timeout(requested_timeout_seconds)
     if not idempotency_key:
         raise ValueError("idempotency_key must be non-empty")
     return {
@@ -234,27 +228,3 @@ def _schedule_body(
         "requested_timeout_seconds": requested_timeout_seconds,
         "idempotency_key": idempotency_key,
     }
-
-
-def _scheduling_unavailable(response: httpx.Response) -> bool:
-    return isinstance(api_error(response), SchedulingUnavailableError)
-
-
-def _retry_delay(response: httpx.Response | None, attempt: int) -> float:
-    if response is not None:
-        value = response.headers.get("retry-after")
-        if value is not None:
-            try:
-                return max(0.0, min(float(value), 2.0))
-            except ValueError:
-                pass
-    return min(0.25 * (2**attempt), 2.0)
-
-
-def _transport_unavailable() -> SchedulingUnavailableError:
-    return SchedulingUnavailableError(
-        "execution scheduling is temporarily unavailable",
-        code=APIErrorCode.SCHEDULING_UNAVAILABLE,
-        status_code=None,
-        retryable=True,
-    )

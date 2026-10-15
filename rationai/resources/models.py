@@ -1,5 +1,9 @@
+import asyncio
+import time
 from typing import cast
+from uuid import uuid4
 
+import httpx
 import lz4.frame
 import numpy as np
 from httpx import USE_CLIENT_DEFAULT
@@ -10,7 +14,14 @@ from PIL.Image import Image
 
 from rationai._resource import APIResource, AsyncAPIResource
 from rationai.errors import raise_for_api_error
-from rationai.types.builders import ModelInfo
+from rationai.resources._scheduling import (
+    SCHEDULE_ATTEMPTS,
+    retry_delay,
+    scheduling_unavailable,
+    transport_unavailable,
+)
+from rationai.resources._tiles import schedule_request
+from rationai.types.builders import ModelInfo, ScheduledExecution
 
 
 class Models(APIResource):
@@ -119,6 +130,66 @@ class Models(APIResource):
 
         return cast("NDArray[DType]", embedding)
 
+    def schedule(
+        self,
+        model: str,
+        image: Image | NDArray[np.uint8],
+        *,
+        output_dtype: type[np.generic] | None = None,
+        requested_timeout_seconds: int | None = None,
+        idempotency_key: str | None = None,
+        timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
+        **headers: str,
+    ) -> ScheduledExecution:
+        """Queue one tile for the model instead of waiting on the connection.
+
+        The tile must be what the model's raw endpoint takes: a uint8 RGB image
+        of its `tile_size`. Collect the outcome with `executions.wait` and
+        `executions.result`; the response is kept for a limited time.
+
+        Args:
+            model: Model ID.
+            image: The tile; must be a uint8 RGB image of the model's tile size.
+            output_dtype: Output dtype for models that support `x-output-dtype`.
+            requested_timeout_seconds: Optional server-side deadline.
+            idempotency_key: Recovery key; generated if omitted. Reuse the same
+                key after a client restart to recover an ambiguous submission.
+            timeout: HTTP timeout for each submission attempt.
+            **headers: Additional x- headers, e.g. pool_tokens="false".
+
+        Returns:
+            The admitted execution, replay flag, and idempotency key.
+        """
+        key = idempotency_key or str(uuid4())
+        request = schedule_request(
+            model,
+            image,
+            idempotency_key=key,
+            output_dtype=output_dtype,
+            requested_timeout_seconds=requested_timeout_seconds,
+            headers=headers,
+        )
+        for attempt in range(SCHEDULE_ATTEMPTS):
+            try:
+                response = self._post(
+                    request.url,
+                    content=request.content,
+                    headers=request.headers,
+                    params=request.params,
+                    timeout=timeout,
+                )
+            except httpx.TransportError as error:
+                if attempt + 1 == SCHEDULE_ATTEMPTS:
+                    raise transport_unavailable() from error
+                time.sleep(retry_delay(None, attempt))
+                continue
+            if scheduling_unavailable(response) and attempt + 1 < SCHEDULE_ATTEMPTS:
+                time.sleep(retry_delay(response, attempt))
+                continue
+            raise_for_api_error(response)
+            return ScheduledExecution.from_dict(response.json(), idempotency_key=key)
+        raise AssertionError("schedule retry loop did not return or raise")
+
 
 class AsyncModels(AsyncAPIResource):
     async def list(
@@ -225,3 +296,63 @@ class AsyncModels(AsyncAPIResource):
         embedding = embedding.reshape(eval(response_shape))
 
         return cast("NDArray[DType]", embedding)
+
+    async def schedule(
+        self,
+        model: str,
+        image: Image | NDArray[np.uint8],
+        *,
+        output_dtype: type[np.generic] | None = None,
+        requested_timeout_seconds: int | None = None,
+        idempotency_key: str | None = None,
+        timeout: TimeoutTypes | UseClientDefault = USE_CLIENT_DEFAULT,
+        **headers: str,
+    ) -> ScheduledExecution:
+        """Queue one tile for the model instead of waiting on the connection.
+
+        The tile must be what the model's raw endpoint takes: a uint8 RGB image
+        of its `tile_size`. Collect the outcome with `executions.wait` and
+        `executions.result`; the response is kept for a limited time.
+
+        Args:
+            model: Model ID.
+            image: The tile; must be a uint8 RGB image of the model's tile size.
+            output_dtype: Output dtype for models that support `x-output-dtype`.
+            requested_timeout_seconds: Optional server-side deadline.
+            idempotency_key: Recovery key; generated if omitted. Reuse the same
+                key after a client restart to recover an ambiguous submission.
+            timeout: HTTP timeout for each submission attempt.
+            **headers: Additional x- headers, e.g. pool_tokens="false".
+
+        Returns:
+            The admitted execution, replay flag, and idempotency key.
+        """
+        key = idempotency_key or str(uuid4())
+        request = schedule_request(
+            model,
+            image,
+            idempotency_key=key,
+            output_dtype=output_dtype,
+            requested_timeout_seconds=requested_timeout_seconds,
+            headers=headers,
+        )
+        for attempt in range(SCHEDULE_ATTEMPTS):
+            try:
+                response = await self._post(
+                    request.url,
+                    content=request.content,
+                    headers=request.headers,
+                    params=request.params,
+                    timeout=timeout,
+                )
+            except httpx.TransportError as error:
+                if attempt + 1 == SCHEDULE_ATTEMPTS:
+                    raise transport_unavailable() from error
+                await asyncio.sleep(retry_delay(None, attempt))
+                continue
+            if scheduling_unavailable(response) and attempt + 1 < SCHEDULE_ATTEMPTS:
+                await asyncio.sleep(retry_delay(response, attempt))
+                continue
+            raise_for_api_error(response)
+            return ScheduledExecution.from_dict(response.json(), idempotency_key=key)
+        raise AssertionError("schedule retry loop did not return or raise")

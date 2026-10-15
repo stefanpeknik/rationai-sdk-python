@@ -18,6 +18,8 @@ class APIErrorCode(StrEnum):
     UNKNOWN_EXECUTION = "unknown_execution"
     BUILDER_BACKPRESSURE = "builder_backpressure"
     BUILDER_UNAVAILABLE = "builder_unavailable"
+    PAYLOAD_TOO_LARGE = "payload_too_large"
+    RESULT_UNAVAILABLE = "result_unavailable"
 
 
 class RationAIAPIError(RuntimeError):
@@ -71,6 +73,14 @@ class BuilderUnavailableError(RationAIAPIError):
     pass
 
 
+class PayloadTooLargeError(RationAIAPIError):
+    pass
+
+
+class ResultUnavailableError(RationAIAPIError):
+    """The execution has no stored model response (yet, or ever)."""
+
+
 _ERROR_TYPES: dict[str, type[RationAIAPIError]] = {
     APIErrorCode.INVALID_REQUEST: InvalidRequestError,
     APIErrorCode.UNKNOWN_BUILDER: UnknownBuilderError,
@@ -81,6 +91,8 @@ _ERROR_TYPES: dict[str, type[RationAIAPIError]] = {
     APIErrorCode.UNKNOWN_EXECUTION: UnknownExecutionError,
     APIErrorCode.BUILDER_BACKPRESSURE: BuilderBackpressureError,
     APIErrorCode.BUILDER_UNAVAILABLE: BuilderUnavailableError,
+    APIErrorCode.PAYLOAD_TOO_LARGE: PayloadTooLargeError,
+    APIErrorCode.RESULT_UNAVAILABLE: ResultUnavailableError,
 }
 
 
