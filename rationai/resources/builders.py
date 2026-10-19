@@ -58,7 +58,7 @@ class Builders(APIResource):
         """
         body = _run_body(request, run_timeout_seconds)
         response = self._post(
-            f"v1/builders/{quote(builder_id, safe='')}/run",
+            _path(builder_id, request, "run"),
             json=body,
             timeout=timeout,
         )
@@ -92,7 +92,7 @@ class Builders(APIResource):
         for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = self._post(
-                    f"v1/builders/{quote(builder_id, safe='')}/schedule",
+                    _path(builder_id, request, "schedule"),
                     json=body,
                     timeout=timeout,
                 )
@@ -142,7 +142,7 @@ class AsyncBuilders(AsyncAPIResource):
         """
         body = _run_body(request, run_timeout_seconds)
         response = await self._post(
-            f"v1/builders/{quote(builder_id, safe='')}/run",
+            _path(builder_id, request, "run"),
             json=body,
             timeout=timeout,
         )
@@ -176,7 +176,7 @@ class AsyncBuilders(AsyncAPIResource):
         for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = await self._post(
-                    f"v1/builders/{quote(builder_id, safe='')}/schedule",
+                    _path(builder_id, request, "schedule"),
                     json=body,
                     timeout=timeout,
                 )
@@ -223,8 +223,13 @@ def _schedule_body(
     if not idempotency_key:
         raise ValueError("idempotency_key must be non-empty")
     return {
-        "provider": "standalone",
-        "body": request.to_dict(),
+        **request.to_dict(),
         "requested_timeout_seconds": requested_timeout_seconds,
         "idempotency_key": idempotency_key,
     }
+
+
+def _path(builder_id: str, request: BuilderRequest, action: str) -> str:
+    builder = quote(builder_id, safe="")
+    model = quote(request.model_id, safe="")
+    return f"v1/builders/{builder}/models/{model}/{action}"

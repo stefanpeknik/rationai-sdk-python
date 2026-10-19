@@ -63,8 +63,8 @@ class BuilderRequest:
     output_path: str | None = None
 
     def to_dict(self) -> dict[str, object]:
+        """The request body; the builder and model are in the URL."""
         body: dict[str, object] = {
-            "model_id": self.model_id,
             "inputs": {name: asdict(value) for name, value in self.inputs.items()},
             "input_access": asdict(self.input_access),
         }

@@ -1,6 +1,7 @@
 import asyncio
 import time
 from typing import cast
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -51,7 +52,9 @@ class Models(APIResource):
                 (for binary classification) or probabilities for each class.
         """
         compressed_data = lz4.frame.compress(image.tobytes())
-        response = self._post(model, data=compressed_data, timeout=timeout)
+        response = self._post(
+            _run_path(model), content=compressed_data, timeout=timeout
+        )
         response.raise_for_status()
         return response.json()
 
@@ -78,7 +81,9 @@ class Models(APIResource):
             h, w = image.shape[:2]
 
         compressed_data = lz4.frame.compress(image.tobytes())
-        response = self._post(model, data=compressed_data, timeout=timeout)
+        response = self._post(
+            _run_path(model), content=compressed_data, timeout=timeout
+        )
         response.raise_for_status()
 
         return np.frombuffer(
@@ -115,8 +120,8 @@ class Models(APIResource):
         )
 
         response = self._post(
-            model,
-            data=compressed_data,
+            _run_path(model),
+            content=compressed_data,
             headers=request_headers,
             timeout=timeout,
         )
@@ -218,7 +223,9 @@ class AsyncModels(AsyncAPIResource):
                 (for binary classification) or probabilities for each class.
         """
         compressed_data = lz4.frame.compress(image.tobytes())
-        response = await self._post(model, data=compressed_data, timeout=timeout)
+        response = await self._post(
+            _run_path(model), content=compressed_data, timeout=timeout
+        )
         response.raise_for_status()
         return response.json()
 
@@ -245,7 +252,9 @@ class AsyncModels(AsyncAPIResource):
             h, w = image.shape[:2]
 
         compressed_data = lz4.frame.compress(image.tobytes())
-        response = await self._post(model, data=compressed_data, timeout=timeout)
+        response = await self._post(
+            _run_path(model), content=compressed_data, timeout=timeout
+        )
         response.raise_for_status()
 
         return np.frombuffer(
@@ -282,8 +291,8 @@ class AsyncModels(AsyncAPIResource):
         )
 
         response = await self._post(
-            model,
-            data=compressed_data,
+            _run_path(model),
+            content=compressed_data,
             headers=request_headers,
             timeout=timeout,
         )
@@ -356,3 +365,7 @@ class AsyncModels(AsyncAPIResource):
             raise_for_api_error(response)
             return ScheduledExecution.from_dict(response.json(), idempotency_key=key)
         raise AssertionError("schedule retry loop did not return or raise")
+
+
+def _run_path(model: str) -> str:
+    return f"v1/models/{quote(model, safe='')}/run"

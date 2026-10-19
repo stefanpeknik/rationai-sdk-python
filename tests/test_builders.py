@@ -112,15 +112,17 @@ class BuilderClientTests(unittest.TestCase):
             client.builders.schedule("heatmap", request, idempotency_key="defaults-1")
         self.assertNotIn("resolved_configuration", bodies[0])
         self.assertNotIn("output_path", bodies[0])
-        self.assertNotIn("resolved_configuration", bodies[1]["body"])
-        self.assertNotIn("output_path", bodies[1]["body"])
+        self.assertNotIn("resolved_configuration", bodies[1])
+        self.assertNotIn("output_path", bodies[1])
 
     def test_legacy_model_url_configures_the_shared_origin(self) -> None:
         paths: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
             paths.append(request.url.path)
-            if request.url.path.endswith("/run"):
+            if "/v1/builders/" in request.url.path and request.url.path.endswith(
+                "/run"
+            ):
                 return httpx.Response(200, json=RESULT)
             return httpx.Response(200, json=0.75)
 
@@ -136,8 +138,8 @@ class BuilderClientTests(unittest.TestCase):
         self.assertEqual(
             paths,
             [
-                "/model-service/classifier",
-                "/model-service/v1/builders/heatmap/run",
+                "/model-service/v1/models/classifier/run",
+                "/model-service/v1/builders/heatmap/models/prostate-classifier-1/run",
             ],
         )
 
@@ -158,7 +160,9 @@ class BuilderClientTests(unittest.TestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append((request.method, request.url.path))
-            if request.url.path.endswith("/run"):
+            if "/v1/builders/" in request.url.path and request.url.path.endswith(
+                "/run"
+            ):
                 return httpx.Response(200, json=RESULT)
             if request.url.path.endswith("/schedule"):
                 return httpx.Response(
@@ -183,9 +187,15 @@ class BuilderClientTests(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                ("POST", "/model-service/classifier"),
-                ("POST", "/model-service/v1/builders/heatmap/run"),
-                ("POST", "/model-service/v1/builders/heatmap/schedule"),
+                ("POST", "/model-service/v1/models/classifier/run"),
+                (
+                    "POST",
+                    "/model-service/v1/builders/heatmap/models/prostate-classifier-1/run",
+                ),
+                (
+                    "POST",
+                    "/model-service/v1/builders/heatmap/models/prostate-classifier-1/schedule",
+                ),
                 ("GET", "/model-service/v1/executions/execution-1"),
                 ("POST", "/model-service/v1/executions/execution-1/cancel"),
             ],
@@ -208,7 +218,9 @@ class BuilderClientTests(unittest.TestCase):
             result = client.models.classify_image("classifier", image)
 
         self.assertEqual(result, 0.75)
-        self.assertEqual(captured[0].url, "http://model-service/classifier")
+        self.assertEqual(
+            captured[0].url, "http://model-service/v1/models/classifier/run"
+        )
         self.assertEqual(lz4.frame.decompress(captured[0].content), image.tobytes())
 
     def test_run_serializes_tagged_inputs_and_parses_tagged_outputs(self) -> None:
@@ -228,7 +240,10 @@ class BuilderClientTests(unittest.TestCase):
                 run_timeout_seconds=30,
             )
 
-        self.assertEqual(captured[0].url.path, "/v1/builders/heatmap/run")
+        self.assertEqual(
+            captured[0].url.path,
+            "/v1/builders/heatmap/models/prostate-classifier-1/run",
+        )
         body = json.loads(captured[0].content)
         self.assertEqual(body["inputs"]["slide"]["kind"], "shared_path")
         self.assertEqual(builder_request().inputs["slide"].kind, InputKind.SHARED_PATH)
@@ -368,7 +383,9 @@ class BuilderClientTests(unittest.TestCase):
 
     def test_run_and_scheduled_execution_have_equivalent_results(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path.endswith("/run"):
+            if "/v1/builders/" in request.url.path and request.url.path.endswith(
+                "/run"
+            ):
                 return httpx.Response(200, json=RESULT)
             if request.url.path.endswith("/schedule"):
                 return httpx.Response(
@@ -405,7 +422,9 @@ class AsyncBuilderClientTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append((request.method, request.url.path))
-            if request.url.path.endswith("/run"):
+            if "/v1/builders/" in request.url.path and request.url.path.endswith(
+                "/run"
+            ):
                 return httpx.Response(200, json=RESULT)
             if request.url.path.endswith("/schedule"):
                 return httpx.Response(
@@ -430,9 +449,15 @@ class AsyncBuilderClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             requests,
             [
-                ("POST", "/model-service/classifier"),
-                ("POST", "/model-service/v1/builders/heatmap/run"),
-                ("POST", "/model-service/v1/builders/heatmap/schedule"),
+                ("POST", "/model-service/v1/models/classifier/run"),
+                (
+                    "POST",
+                    "/model-service/v1/builders/heatmap/models/prostate-classifier-1/run",
+                ),
+                (
+                    "POST",
+                    "/model-service/v1/builders/heatmap/models/prostate-classifier-1/schedule",
+                ),
                 ("GET", "/model-service/v1/executions/execution-1"),
                 ("POST", "/model-service/v1/executions/execution-1/cancel"),
             ],
@@ -443,7 +468,9 @@ class AsyncBuilderClientTests(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append((request.method, request.url.path))
-            if request.url.path.endswith("/run"):
+            if "/v1/builders/" in request.url.path and request.url.path.endswith(
+                "/run"
+            ):
                 return httpx.Response(200, json=RESULT)
             if request.url.path.endswith("/schedule"):
                 return httpx.Response(
@@ -480,8 +507,8 @@ class AsyncBuilderClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             requests,
             [
-                ("POST", "/v1/builders/heatmap/run"),
-                ("POST", "/v1/builders/heatmap/schedule"),
+                ("POST", "/v1/builders/heatmap/models/prostate-classifier-1/run"),
+                ("POST", "/v1/builders/heatmap/models/prostate-classifier-1/schedule"),
                 ("GET", "/v1/executions/execution-1"),
                 ("POST", "/v1/executions/execution-1/cancel"),
             ],
