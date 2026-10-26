@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from enum import StrEnum
+from typing import Any, Literal
+
+
+type JsonValue = (
+    bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
+)
+
+
+class ExecutionStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class InputKind(StrEnum):
+    SHARED_PATH = "shared_path"
+    PROVIDER = "provider"
+
+
+class OutputKind(StrEnum):
+    INLINE = "inline"
+    SHARED_ARTIFACT = "shared_artifact"
+
+
+@dataclass(frozen=True, slots=True)
+class SharedPathInput:
+    path: str
+    kind: Literal[InputKind.SHARED_PATH] = InputKind.SHARED_PATH
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderInput:
+    name: str
+    kind: Literal[InputKind.PROVIDER] = InputKind.PROVIDER
+
+
+type BuilderInput = SharedPathInput | ProviderInput
+
+
+@dataclass(frozen=True, slots=True)
+class InputAccess:
+    kind: str
+    state: dict[str, JsonValue]
+
+
+@dataclass(frozen=True, slots=True)
+class BuilderRequest:
+    """Select a model and supply the builder's inputs and their access.
+
+    Processing settings belong to model-service and are chosen when each attempt
+    starts; `output_path` optionally places the builder's artifact.
+    """
+
+    model_id: str
+    inputs: dict[str, BuilderInput]
+    input_access: InputAccess
+    output_path: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """The request body; the builder and model are in the URL."""
+        body: dict[str, object] = {
+            "inputs": {name: asdict(value) for name, value in self.inputs.items()},
+            "input_access": asdict(self.input_access),
+        }
+        if self.output_path is not None:
+            body["output_path"] = self.output_path
+        return body
+
+
+@dataclass(frozen=True, slots=True)
+class InlineOutput:
+    value: JsonValue
+    kind: Literal[OutputKind.INLINE] = OutputKind.INLINE
+
+
+@dataclass(frozen=True, slots=True)
+class SharedArtifact:
+    path: str
+    media_type: str | None = None
+    kind: Literal[OutputKind.SHARED_ARTIFACT] = OutputKind.SHARED_ARTIFACT
+
+
+type BuilderOutput = InlineOutput | SharedArtifact
+
+
+@dataclass(frozen=True, slots=True)
+class BuilderResult:
+    outputs: dict[str, BuilderOutput]
+
+    @classmethod
+    def from_dict(cls, value: object) -> BuilderResult:
+        mapping = _mapping(value, "builder result")
+        outputs = _mapping(mapping.get("outputs"), "builder outputs")
+        return cls({name: _output(output) for name, output in outputs.items()})
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionError:
+    code: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceResult:
+    """A stored raw model response; download it with `executions.result`."""
+
+    media_type: str | None
+    headers: dict[str, str]
+    size: int
+
+    @classmethod
+    def from_dict(cls, value: object) -> InferenceResult:
+        mapping = _mapping(value, "inference result")
+        media_type = mapping.get("media_type")
+        headers = _mapping(mapping.get("headers"), "inference result headers")
+        size = mapping.get("size")
+        if media_type is not None and not isinstance(media_type, str):
+            raise ValueError("inference result media_type must be a string or null")
+        if not all(isinstance(item, str) for item in headers.values()):
+            raise ValueError("inference result headers must be strings")
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise ValueError("inference result size must be a non-negative integer")
+        return cls(media_type, headers, size)
+
+
+class Operation(StrEnum):
+    BUILDER = "builder"
+    INFERENCE = "inference"
+
+
+@dataclass(frozen=True, slots=True)
+class Execution:
+    """A durable execution of a builder, or of one raw model request.
+
+    `builder_id` is None for raw inference.
+    """
+
+    id: str
+    operation: Operation
+    builder_id: str | None
+    model_id: str
+    status: ExecutionStatus
+    result: BuilderResult | InferenceResult | None = None
+    error: ExecutionError | None = None
+
+    @property
+    def finished(self) -> bool:
+        return self.status in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> Execution:
+        mapping = _mapping(value, "execution")
+        try:
+            status = ExecutionStatus(_string(mapping, "status"))
+            operation = Operation(mapping.get("operation", Operation.BUILDER))
+        except ValueError as error:
+            raise ValueError("execution has an unknown status or operation") from error
+        raw_result = mapping.get("result")
+        raw_error = mapping.get("error")
+        result: BuilderResult | InferenceResult | None = None
+        if raw_result is not None:
+            result = (
+                InferenceResult.from_dict(raw_result)
+                if operation is Operation.INFERENCE
+                else BuilderResult.from_dict(raw_result)
+            )
+        return cls(
+            id=_string(mapping, "id"),
+            operation=operation,
+            builder_id=(
+                _string(mapping, "builder_id")
+                if operation is Operation.BUILDER
+                else None
+            ),
+            model_id=_string(mapping, "model_id"),
+            status=status,
+            result=result,
+            error=_execution_error(raw_error) if raw_error is not None else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ModelInfo:
+    """A deployed model: its inference contract, parameters and usable builders."""
+
+    id: str
+    contract: str
+    parameters: dict[str, JsonValue]
+    builders: list[str]
+
+    @classmethod
+    def from_dict(cls, value: object) -> ModelInfo:
+        mapping = _mapping(value, "model")
+        parameters = _mapping(mapping.get("parameters"), "model parameters")
+        builders = mapping.get("builders")
+        if not isinstance(builders, list) or not all(
+            isinstance(item, str) for item in builders
+        ):
+            raise ValueError("model builders must be a list of strings")
+        return cls(
+            id=_string(mapping, "id"),
+            contract=_string(mapping, "contract"),
+            parameters=parameters,
+            builders=builders,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BuilderInfo:
+    """A builder: the contract it accepts, its inputs and outputs and defaults."""
+
+    id: str
+    accepts: str
+    inputs: dict[str, JsonValue]
+    outputs: dict[str, JsonValue]
+    configuration: dict[str, JsonValue]
+
+    @classmethod
+    def from_dict(cls, value: object) -> BuilderInfo:
+        mapping = _mapping(value, "builder")
+        return cls(
+            id=_string(mapping, "id"),
+            accepts=_string(mapping, "accepts"),
+            inputs=_mapping(mapping.get("inputs"), "builder inputs"),
+            outputs=_mapping(mapping.get("outputs"), "builder outputs"),
+            configuration=_mapping(mapping.get("configuration"), "configuration"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledExecution:
+    execution: Execution
+    created: bool
+    idempotency_key: str
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: object,
+        *,
+        idempotency_key: str,
+    ) -> ScheduledExecution:
+        mapping = _mapping(value, "schedule response")
+        created = mapping.get("created")
+        if not isinstance(created, bool):
+            raise TypeError("schedule response created must be a boolean")
+        return cls(
+            execution=Execution.from_dict(mapping.get("execution")),
+            created=created,
+            idempotency_key=idempotency_key,
+        )
+
+
+def _output(value: object) -> BuilderOutput:
+    mapping = _mapping(value, "builder output")
+    kind = mapping.get("kind")
+    if kind == OutputKind.INLINE:
+        inline_value = mapping.get("value")
+        _ensure_json(inline_value, "inline output")
+        return InlineOutput(inline_value)
+    if kind == OutputKind.SHARED_ARTIFACT:
+        media_type = mapping.get("media_type")
+        if media_type is not None and not isinstance(media_type, str):
+            raise ValueError("shared artifact media_type must be a string or null")
+        return SharedArtifact(_string(mapping, "path"), media_type)
+    raise ValueError("builder output has an unknown kind")
+
+
+def _execution_error(value: object) -> ExecutionError:
+    mapping = _mapping(value, "execution error")
+    return ExecutionError(_string(mapping, "code"), _string(mapping, "message"))
+
+
+def _mapping(value: object, name: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
+def _string(mapping: dict[str, Any], name: str) -> str:
+    value = mapping.get(name)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+def _ensure_json(value: object, name: str) -> None:
+    if value is None or isinstance(value, bool | int | float | str):
+        return
+    if isinstance(value, list):
+        for item in value:
+            _ensure_json(item, name)
+        return
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        for item in value.values():
+            _ensure_json(item, name)
+        return
+    raise ValueError(f"{name} must contain only JSON-compatible values")

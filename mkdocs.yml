@@ -14,8 +14,12 @@ nav:
           - Models: reference/resources/models.md
           - Quality control: reference/resources/qc.md
           - Slide: reference/resources/slide.md
+          - Builders: reference/resources/builders.md
+          - Executions: reference/resources/executions.md
       - Types:
           - QC types: reference/types/qc.md
+          - Builder types: reference/types/builders.md
+          - Inference types: reference/types/inference.md
 
 theme:
   name: material
