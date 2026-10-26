@@ -263,9 +263,11 @@ class BuilderClientTests(unittest.TestCase):
 
     def test_generated_idempotency_key_is_reused_for_schedule_retry(self) -> None:
         payloads: list[dict[str, object]] = []
+        keys: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
             payloads.append(json.loads(request.content))
+            keys.append(request.headers["idempotency-key"])
             if len(payloads) == 1:
                 return api_error("scheduling_unavailable", 503)
             return httpx.Response(
@@ -285,17 +287,17 @@ class BuilderClientTests(unittest.TestCase):
 
         self.assertEqual(len(payloads), 2)
         self.assertEqual(payloads[0], payloads[1])
-        key = payloads[0]["idempotency_key"]
-        self.assertIsInstance(key, str)
-        self.assertEqual(scheduled.idempotency_key, key)
+        self.assertNotIn("idempotency_key", payloads[0])
+        self.assertEqual(keys[0], keys[1])
+        self.assertEqual(scheduled.idempotency_key, keys[0])
         self.assertTrue(scheduled.created)
         self.assertEqual(scheduled.execution.status, ExecutionStatus.QUEUED)
 
     def test_caller_idempotency_key_and_replay_are_exposed(self) -> None:
-        captured: list[dict[str, object]] = []
+        captured: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
-            captured.append(json.loads(request.content))
+            captured.append(request.headers["idempotency-key"])
             return httpx.Response(
                 200,
                 json={"execution": execution_body(), "created": False},
@@ -311,7 +313,7 @@ class BuilderClientTests(unittest.TestCase):
                 idempotency_key="recoverable-key",
             )
 
-        self.assertEqual(captured[0]["idempotency_key"], "recoverable-key")
+        self.assertEqual(captured, ["recoverable-key"])
         self.assertEqual(scheduled.idempotency_key, "recoverable-key")
         self.assertFalse(scheduled.created)
 

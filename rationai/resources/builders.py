@@ -88,12 +88,14 @@ class Builders(APIResource):
             The admitted execution, replay flag, and idempotency key.
         """
         key = idempotency_key or str(uuid4())
-        body = _schedule_body(request, requested_timeout_seconds, key)
+        body = _schedule_body(request, requested_timeout_seconds)
+        headers = _schedule_headers(key)
         for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = self._post(
                     _path(builder_id, request, "schedule"),
                     json=body,
+                    headers=headers,
                     timeout=timeout,
                 )
             except httpx.TransportError as error:
@@ -172,12 +174,14 @@ class AsyncBuilders(AsyncAPIResource):
             The admitted execution, replay flag, and idempotency key.
         """
         key = idempotency_key or str(uuid4())
-        body = _schedule_body(request, requested_timeout_seconds, key)
+        body = _schedule_body(request, requested_timeout_seconds)
+        headers = _schedule_headers(key)
         for attempt in range(SCHEDULE_ATTEMPTS):
             try:
                 response = await self._post(
                     _path(builder_id, request, "schedule"),
                     json=body,
+                    headers=headers,
                     timeout=timeout,
                 )
             except httpx.TransportError as error:
@@ -217,16 +221,18 @@ def _run_body(
 def _schedule_body(
     request: BuilderRequest,
     requested_timeout_seconds: int | None,
-    idempotency_key: str,
 ) -> dict[str, object]:
     check_timeout(requested_timeout_seconds)
-    if not idempotency_key:
-        raise ValueError("idempotency_key must be non-empty")
     return {
         **request.to_dict(),
         "requested_timeout_seconds": requested_timeout_seconds,
-        "idempotency_key": idempotency_key,
     }
+
+
+def _schedule_headers(idempotency_key: str) -> dict[str, str]:
+    if not idempotency_key:
+        raise ValueError("idempotency_key must be non-empty")
+    return {"idempotency-key": idempotency_key}
 
 
 def _path(builder_id: str, request: BuilderRequest, action: str) -> str:
